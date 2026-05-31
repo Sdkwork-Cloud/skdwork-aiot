@@ -130,6 +130,8 @@ fn standard_protocol_catalog_covers_major_iot_ecosystems_without_core_coupling()
         "tasmota.mqtt",
         "wled.mqtt",
         "openbeken.mqtt",
+        "raspberrypi.linux_gateway",
+        "raspberrypi.pico_mqtt",
     ] {
         assert!(
             catalog
@@ -220,4 +222,32 @@ fn protocol_catalog_reference_projects_are_curated_external_baselines() {
             );
         }
     }
+}
+
+#[test]
+fn raspberry_pi_protocols_model_linux_gateway_and_pico_mcu_separately() {
+    let catalog = standard_protocol_catalog();
+    let linux_gateway = catalog
+        .iter()
+        .find(|protocol| protocol.protocol_id == "raspberrypi.linux_gateway")
+        .expect("raspberrypi linux gateway");
+    let pico = catalog
+        .iter()
+        .find(|protocol| protocol.protocol_id == "raspberrypi.pico_mqtt")
+        .expect("raspberrypi pico");
+
+    assert_eq!(linux_gateway.scope, ProtocolPluginScope::BridgeAdapter);
+    assert!(linux_gateway.transports.contains(&TransportBinding::Mqtt));
+    assert!(linux_gateway.transports.contains(&TransportBinding::Http));
+    assert!(linux_gateway
+        .capability_bridges
+        .contains(&CapabilityBridge::StandardCapability));
+    assert!(linux_gateway.reference_projects.is_empty());
+
+    assert_eq!(pico.scope, ProtocolPluginScope::CompatibilityPlugin);
+    assert!(pico.transports.contains(&TransportBinding::Mqtt));
+    assert!(pico
+        .capability_bridges
+        .contains(&CapabilityBridge::MqttTopic));
+    assert!(pico.reference_projects.is_empty());
 }

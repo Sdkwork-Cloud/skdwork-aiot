@@ -402,27 +402,53 @@ Hardware support is modeled through profiles, not hardcoded conditionals.
 Key dimensions:
 
 ```text
+HardwareClass:
+  mcu / linux_sbc / edge_gateway / industrial_controller /
+  camera_device / audio_device / cellular_module / bridge_adapter
+
 ChipFamily:
   esp32_s3 / esp32_c3 / esp8266 / nrf52 / stm32 / rp2040 /
-  bk72xx / bl602 / w800 / rtl8720 / linux_arm64 / riscv_mcu
+  bk72xx / bl602 / w800 / rtl8720 / bcm2712 / linux_arm64 / riscv_mcu
 
 RuntimeProfile:
   esp_idf / arduino / freertos / zephyr / riot / nuttx / linux /
+  docker / home_assistant / pico_sdk / micropython /
   esphome / tasmota / openbeken / xiaozhi_firmware
 
 ConnectivityProfile:
-  wifi / ble / ethernet / lte / nb_iot / thread / zigbee / lora / serial
+  wifi / ble / ethernet / lte / nb_iot / thread / zigbee / zigbee_usb /
+  lora / serial
 
 SecurityProfile:
   bearer_token / hmac / mtls_x509 / secure_boot / flash_encryption /
-  secure_element / tpm / hardware_attestation
+  secure_element / tpm / hardware_attestation / device_secret
 
 OtaProfile:
   esp_ota / mcuboot / hawkbit_ddi / mender_like / tasmota_ota /
-  openbeken_ota / xiaozhi_ota / custom_http
+  openbeken_ota / xiaozhi_ota / http_firmware / apt_container_image /
+  custom_http
 ```
 
-This allows the platform to support ESP32/xiaozhi today and non-ESP chips later without changing the core protocol model.
+Hardware class is explicit because a chip name alone is not enough to decide
+protocol behavior. An ESP32-S3 voice device and a Raspberry Pi Pico W are MCU
+firmware endpoints. A Raspberry Pi 4/5/CM, Jetson, or industrial Linux box is a
+Linux SBC or edge gateway that may proxy many downstream devices over Zigbee,
+Matter, BLE, Modbus, serial, camera, or audio paths. The first hardware class is
+the primary class; additional classes describe composite roles such as
+`linux_sbc + edge_gateway`.
+
+Reference profiles:
+
+| Profile | Hardware class | Chip family | Runtime | Connectivity | Security | OTA |
+| --- | --- | --- | --- | --- | --- | --- |
+| `hw-esp32-s3` | `mcu`, `audio_device` | `esp32_s3` | `esp_idf`, `freertos`, `xiaozhi_firmware` | `wifi`, `ble` | `secure_boot`, `flash_encryption`, `device_secret` | `xiaozhi_ota`, `esp_ota` |
+| `hw-raspberry-pi-5` | `linux_sbc`, `edge_gateway` | `bcm2712` | `linux`, `docker`, `home_assistant` | `ethernet`, `wifi`, `zigbee_usb` | `tpm` | `apt_container_image` |
+| `hw-raspberry-pi-pico-w` | `mcu` | `rp2040` | `pico_sdk`, `micropython`, `zephyr` | `wifi` | `device_secret` | `http_firmware`, `mcuboot` |
+| `hw-industrial-arm64-gateway` | `linux_sbc`, `industrial_controller`, `edge_gateway` | `linux_arm64` | `linux`, `docker` | `ethernet`, `lte`, `serial` | `tpm`, `mtls_x509` | `apt_container_image`, `mender_like` |
+
+This allows the platform to support ESP32/xiaozhi today, Raspberry Pi Linux
+gateways and Pico/RP2040 MCU firmware endpoints next, and other non-ESP chips
+or Linux gateways later without changing the core protocol model.
 
 ## 6. Protocol Architecture
 
@@ -662,6 +688,8 @@ The platform should learn from existing projects but not become coupled to them.
 | Tasmota | MQTT topic command model, templates/modules, non-ESP chip compatibility. |
 | Zigbee2MQTT | Zigbee bridge and MQTT topic mapping. |
 | WLED | Smart lighting firmware, MQTT/JSON control surface, device effects/state model. |
+| Raspberry Pi Linux SBC | Edge gateway pattern for Linux, Docker, Home Assistant, USB radios, camera/audio workloads, and downstream protocol bridges. |
+| Raspberry Pi Pico/RP2040 | MCU firmware pattern for Pico SDK, MicroPython, Zephyr, constrained Wi-Fi telemetry, command, and OTA profiles. |
 | ESP-IDF | Espressif chip SDK, task/runtime, networking, OTA, peripheral capability baseline. |
 | Arduino-ESP32 | Arduino-compatible ESP32 hardware runtime, board/package model. |
 | MicroPython | Microcontroller runtime, firmware scripting, board and peripheral abstraction. |
@@ -676,6 +704,10 @@ Design decision:
 - ThingsBoard telemetry/latest/attribute/OTA ideas are adopted.
 - MQTT broker/server should directly integrate RMQTT. LoRaWAN server, Zigbee bridge, Matter stack, Modbus library, and OPC UA stack should be integrated or bridged, not rewritten in v1.
 - `external/` is limited to high-star, high-signal smart-hardware references plus explicit platform anchors such as Xiaozhi and RMQTT.
+- Raspberry Pi Linux gateway and Raspberry Pi Pico support are modeled in core
+  hardware/protocol standards, but no Raspberry Pi-specific source tree is kept
+  in `external/` yet. Promote a new submodule only when it becomes a primary
+  implementation reference, not merely because the hardware class is supported.
 
 ## 9. Product And Functional Plan
 

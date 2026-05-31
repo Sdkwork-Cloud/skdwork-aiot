@@ -576,6 +576,25 @@ pub fn standard_protocol_catalog() -> Vec<ProtocolCatalogEntry> {
         .with_capability_bridge(CapabilityBridge::StandardCapability)
         .with_reference_project("wled"),
         ProtocolCatalogEntry::new(
+            "raspberrypi.linux_gateway",
+            "Raspberry Pi Linux Gateway",
+            ProtocolPluginScope::BridgeAdapter,
+        )
+        .with_transport(TransportBinding::Mqtt)
+        .with_transport(TransportBinding::Http)
+        .with_transport(TransportBinding::WebSocket)
+        .with_capability_bridge(CapabilityBridge::StandardCapability)
+        .with_capability_bridge(CapabilityBridge::MqttTopic),
+        ProtocolCatalogEntry::new(
+            "raspberrypi.pico_mqtt",
+            "Raspberry Pi Pico MQTT",
+            ProtocolPluginScope::CompatibilityPlugin,
+        )
+        .with_transport(TransportBinding::Mqtt)
+        .with_transport(TransportBinding::Http)
+        .with_capability_bridge(CapabilityBridge::MqttTopic)
+        .with_capability_bridge(CapabilityBridge::StandardCapability),
+        ProtocolCatalogEntry::new(
             "openbeken.mqtt",
             "OpenBeken MQTT",
             ProtocolPluginScope::CompatibilityPlugin,

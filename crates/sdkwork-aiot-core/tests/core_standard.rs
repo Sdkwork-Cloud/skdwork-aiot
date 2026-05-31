@@ -1,7 +1,7 @@
 use sdkwork_aiot_contract::AiotOwnershipRef;
 use sdkwork_aiot_core::{
     protocol_ingest_plan, CapabilityDefinition, CapabilityKind, CommandStatus, Device,
-    DeviceCommand, DomainEventKind, HardwareProfile, Product, ProtocolIngestAction,
+    DeviceCommand, DomainEventKind, HardwareClass, HardwareProfile, Product, ProtocolIngestAction,
     ProtocolIngestRecord, ProtocolProfile,
 };
 
@@ -31,12 +31,14 @@ fn command_lifecycle_is_explicit() {
 #[test]
 fn hardware_and_protocol_profiles_abstract_chip_and_firmware_ecosystems() {
     let profile = HardwareProfile::new("hw-esp32-s3", "esp32_s3")
+        .with_hardware_class(HardwareClass::Mcu)
         .with_runtime("esp_idf")
         .with_runtime("freertos")
         .with_connectivity("wifi")
         .with_ota_profile("xiaozhi_ota");
 
     assert_eq!(profile.chip_family, "esp32_s3");
+    assert_eq!(profile.hardware_class, HardwareClass::Mcu);
     assert!(profile.runtime_profiles.contains(&"esp_idf".to_string()));
     assert!(profile.connectivity_profiles.contains(&"wifi".to_string()));
     assert!(profile.ota_profiles.contains(&"xiaozhi_ota".to_string()));
@@ -53,6 +55,46 @@ fn hardware_and_protocol_profiles_abstract_chip_and_firmware_ecosystems() {
     assert!(protocol
         .allowed_message_classes
         .contains(&"media_frame".to_string()));
+}
+
+#[test]
+fn hardware_profiles_distinguish_linux_gateways_from_mcu_firmware() {
+    let raspberry_pi_gateway = HardwareProfile::new("hw-raspberry-pi-5", "bcm2712")
+        .with_hardware_class(HardwareClass::LinuxSbc)
+        .with_hardware_class(HardwareClass::EdgeGateway)
+        .with_runtime("linux")
+        .with_runtime("docker")
+        .with_runtime("home_assistant")
+        .with_connectivity("ethernet")
+        .with_connectivity("wifi")
+        .with_connectivity("zigbee_usb")
+        .with_security_profile("tpm")
+        .with_ota_profile("apt_container_image");
+
+    assert_eq!(raspberry_pi_gateway.chip_family, "bcm2712");
+    assert_eq!(raspberry_pi_gateway.hardware_class, HardwareClass::LinuxSbc);
+    assert!(raspberry_pi_gateway
+        .hardware_classes
+        .contains(&HardwareClass::EdgeGateway));
+    assert!(raspberry_pi_gateway
+        .runtime_profiles
+        .contains(&"home_assistant".to_string()));
+    assert!(raspberry_pi_gateway
+        .connectivity_profiles
+        .contains(&"zigbee_usb".to_string()));
+
+    let pico = HardwareProfile::new("hw-raspberry-pi-pico-w", "rp2040")
+        .with_hardware_class(HardwareClass::Mcu)
+        .with_runtime("pico_sdk")
+        .with_runtime("micropython")
+        .with_runtime("zephyr")
+        .with_connectivity("wifi")
+        .with_security_profile("device_secret")
+        .with_ota_profile("http_firmware");
+
+    assert_eq!(pico.hardware_class, HardwareClass::Mcu);
+    assert!(pico.runtime_profiles.contains(&"pico_sdk".to_string()));
+    assert!(!pico.runtime_profiles.contains(&"docker".to_string()));
 }
 
 #[test]

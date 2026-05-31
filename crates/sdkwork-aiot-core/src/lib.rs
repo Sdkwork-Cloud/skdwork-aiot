@@ -8,10 +8,25 @@ pub struct Product {
     pub display_name: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HardwareClass {
+    Unspecified,
+    Mcu,
+    LinuxSbc,
+    EdgeGateway,
+    IndustrialController,
+    CameraDevice,
+    AudioDevice,
+    CellularModule,
+    BridgeAdapter,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HardwareProfile {
     pub profile_id: String,
     pub chip_family: String,
+    pub hardware_class: HardwareClass,
+    pub hardware_classes: Vec<HardwareClass>,
     pub runtime_profiles: Vec<String>,
     pub connectivity_profiles: Vec<String>,
     pub security_profiles: Vec<String>,
@@ -23,11 +38,23 @@ impl HardwareProfile {
         Self {
             profile_id: profile_id.into(),
             chip_family: chip_family.into(),
+            hardware_class: HardwareClass::Unspecified,
+            hardware_classes: Vec::new(),
             runtime_profiles: Vec::new(),
             connectivity_profiles: Vec::new(),
             security_profiles: Vec::new(),
             ota_profiles: Vec::new(),
         }
+    }
+
+    pub fn with_hardware_class(mut self, hardware_class: HardwareClass) -> Self {
+        if self.hardware_class == HardwareClass::Unspecified {
+            self.hardware_class = hardware_class;
+        }
+        if !self.hardware_classes.contains(&hardware_class) {
+            self.hardware_classes.push(hardware_class);
+        }
+        self
     }
 
     pub fn with_runtime(mut self, runtime_profile: impl Into<String>) -> Self {

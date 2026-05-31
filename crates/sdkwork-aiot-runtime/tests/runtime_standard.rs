@@ -576,6 +576,10 @@ fn composable_bundle_types_model_storage_protocol_routes_listeners_and_health() 
     assert!(storage.migrations_required);
     assert!(protocols.protocol_ids.contains(&"xiaozhi.websocket"));
     assert!(protocols.protocol_ids.contains(&"mqtt.v5"));
+    assert!(protocols
+        .protocol_ids
+        .contains(&"raspberrypi.linux_gateway"));
+    assert!(protocols.protocol_ids.contains(&"raspberrypi.pico_mqtt"));
     assert!(routes
         .app_routes
         .iter()

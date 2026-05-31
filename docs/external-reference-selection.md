@@ -37,3 +37,16 @@ references for SDKWork AIoT server design.
 The protocol catalog can still model CoAP/LwM2M, Matter, LoRaWAN, Modbus,
 OPC UA, and other standards. Those protocol abstractions do not require keeping
 their lower-star reference implementations in `external/`.
+
+Raspberry Pi Linux SBC/gateway and Raspberry Pi Pico/RP2040 MCU profiles are
+modeled in the core hardware and protocol catalogs:
+
+- `raspberrypi.linux_gateway` covers Linux SBC and edge-gateway deployments
+  that bridge MQTT, HTTP, WebSocket, USB radios, camera/audio workloads, and
+  downstream protocols.
+- `raspberrypi.pico_mqtt` covers Pico/Pico W MCU firmware deployments that use
+  MQTT or HTTP-compatible firmware and telemetry patterns.
+
+No Raspberry Pi-specific source tree is kept in `external/` at this stage. This
+keeps the reference set focused and avoids adding OS images, sample projects, or
+board SDK mirrors unless one becomes a primary implementation anchor later.
