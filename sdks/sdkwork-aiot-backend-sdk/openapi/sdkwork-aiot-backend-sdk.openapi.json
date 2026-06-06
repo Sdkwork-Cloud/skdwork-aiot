@@ -61,6 +61,161 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "tags": ["iot"],
+        "operationId": "products.create",
+        "x-sdkwork-required-permission": "iot.products.write",
+        "summary": "Create AIoT product",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotProductCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Product created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotProductResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/products/{productId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "products.retrieve",
+        "x-sdkwork-required-permission": "iot.products.read",
+        "summary": "Retrieve AIoT product",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Product.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotProductResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "products.update",
+        "x-sdkwork-required-permission": "iot.products.write",
+        "summary": "Update AIoT product",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotProductUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Product updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotProductResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "products.delete",
+        "x-sdkwork-required-permission": "iot.products.write",
+        "summary": "Delete AIoT product",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProductId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Product deleted."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/backend/v3/api/iot/hardware_profiles": {
@@ -102,6 +257,161 @@
                 }
               }
             }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["iot"],
+        "operationId": "hardwareProfiles.create",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Create hardware profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotHardwareProfileCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Hardware profile created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotHardwareProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/hardware_profiles/{hardwareProfileId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "hardwareProfiles.retrieve",
+        "x-sdkwork-required-permission": "iot.profiles.read",
+        "summary": "Retrieve hardware profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hardware profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotHardwareProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "hardwareProfiles.update",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Update hardware profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotHardwareProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hardware profile updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotHardwareProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "hardwareProfiles.delete",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Delete hardware profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/HardwareProfileId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Hardware profile deleted."
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -153,6 +463,244 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "tags": ["iot"],
+        "operationId": "protocolProfiles.create",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Create protocol profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotProtocolProfileCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Protocol profile created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotProtocolProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/protocol_profiles/{protocolProfileId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "protocolProfiles.retrieve",
+        "x-sdkwork-required-permission": "iot.profiles.read",
+        "summary": "Retrieve protocol profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolProfileId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Protocol profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotProtocolProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "protocolProfiles.update",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Update protocol profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolProfileId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotProtocolProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Protocol profile updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotProtocolProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "protocolProfiles.delete",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Delete protocol profile",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProtocolProfileId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Protocol profile deleted."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/capability_models": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "capabilityModels.list",
+        "x-sdkwork-required-permission": "iot.profiles.read",
+        "summary": "List capability models",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Capability model collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotCapabilityModelListResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "tags": ["iot"],
+        "operationId": "capabilityModels.create",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Create capability model",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotCapabilityModelCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Capability model created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotCapabilityModelResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/backend/v3/api/iot/capability_models/{capabilityModelId}": {
@@ -186,14 +734,7 @@
         ],
         "parameters": [
           {
-            "name": "capabilityModelId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
+            "$ref": "#/components/parameters/CapabilityModelId"
           }
         ],
         "responses": {
@@ -209,6 +750,73 @@
           },
           "404": {
             "$ref": "#/components/responses/Problem"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "capabilityModels.update",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Update capability model",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CapabilityModelId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotCapabilityModelUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Capability model updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotCapabilityModelResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "capabilityModels.delete",
+        "x-sdkwork-required-permission": "iot.profiles.write",
+        "summary": "Delete capability model",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CapabilityModelId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Capability model deleted."
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1577,6 +2185,46 @@
           "maxLength": 128
         }
       },
+      "ProductId": {
+        "name": "productId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "HardwareProfileId": {
+        "name": "hardwareProfileId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "ProtocolProfileId": {
+        "name": "protocolProfileId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "CapabilityModelId": {
+        "name": "capabilityModelId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
       "ArtifactId": {
         "name": "artifactId",
         "in": "path",
@@ -1654,14 +2302,344 @@
       "AiotProductListResponse": {
         "$ref": "#/components/schemas/StandardCollectionResponse"
       },
+      "AiotProductResponse": {
+        "$ref": "#/components/schemas/StandardResourceResponse"
+      },
+      "AiotProductCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "productId",
+          "displayName",
+          "defaultHardwareProfileId",
+          "defaultProtocolProfileId",
+          "defaultCapabilityModelId"
+        ],
+        "properties": {
+          "productId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "defaultHardwareProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "defaultProtocolProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "defaultCapabilityModelId": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
+      },
+      "AiotProductUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "defaultHardwareProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "defaultProtocolProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "defaultCapabilityModelId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
       "AiotHardwareProfileListResponse": {
         "$ref": "#/components/schemas/StandardCollectionResponse"
+      },
+      "AiotHardwareProfileResponse": {
+        "$ref": "#/components/schemas/StandardResourceResponse"
+      },
+      "AiotHardwareProfileCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["hardwareProfileId", "chipFamily"],
+        "properties": {
+          "hardwareProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "chipFamily": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "hardwareClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runtimeProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connectivityProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "securityProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "otaProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AiotHardwareProfileUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chipFamily": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "hardwareClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "runtimeProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connectivityProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "securityProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "otaProfiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
       },
       "AiotProtocolProfileListResponse": {
         "$ref": "#/components/schemas/StandardCollectionResponse"
       },
+      "AiotProtocolProfileResponse": {
+        "$ref": "#/components/schemas/StandardResourceResponse"
+      },
+      "AiotProtocolProfileCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolProfileId", "defaultProtocolId"],
+        "properties": {
+          "protocolProfileId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "defaultProtocolId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "allowedTransports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedMessageClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilityBridges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AiotProtocolProfileUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "defaultProtocolId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "allowedTransports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedMessageClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "capabilityBridges": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "AiotCapabilityModelListResponse": {
+        "$ref": "#/components/schemas/StandardCollectionResponse"
+      },
       "AiotCapabilityModelResponse": {
         "$ref": "#/components/schemas/StandardResourceResponse"
+      },
+      "AiotCapabilityModelCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capabilityModelId", "displayName", "version"],
+        "properties": {
+          "capabilityModelId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityDefinition"
+            }
+          }
+        }
+      },
+      "AiotCapabilityModelUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityDefinition"
+            }
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "CapabilityDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capabilityName", "capabilityKind"],
+        "properties": {
+          "capabilityName": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "capabilityKind": {
+            "type": "string",
+            "enum": ["property", "command", "event", "telemetry", "media", "ota"]
+          },
+          "commands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "protocolMappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityProtocolMapping"
+            }
+          }
+        }
+      },
+      "CapabilityProtocolMapping": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocolId", "mappedName"],
+        "properties": {
+          "protocolId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "mappedName": {
+            "type": "string",
+            "maxLength": 128
+          }
+        }
       },
       "AiotDeviceListResponse": {
         "$ref": "#/components/schemas/StandardCollectionResponse"

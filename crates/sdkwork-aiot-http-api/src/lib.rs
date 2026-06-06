@@ -11,9 +11,7 @@ use sdkwork_aiot_contract::{
     IOT_PERMISSION_SESSIONS_DISCONNECT, IOT_PERMISSION_SESSIONS_READ,
     IOT_PERMISSION_TELEMETRY_READ, IOT_PERMISSION_TWINS_READ, IOT_PERMISSION_TWINS_WRITE,
 };
-use sdkwork_aiot_core::{
-    CapabilityDefinition, CapabilityKind, HardwareClass, HardwareProfile, Product, ProtocolProfile,
-};
+use sdkwork_aiot_core::{CapabilityDefinition, CapabilityKind, ProtocolProfile};
 use sdkwork_aiot_protocol::{standard_protocol_catalog, CapabilityBridge, ProtocolPluginScope};
 use sdkwork_aiot_runtime::{standard_aiot_runtime, AiotRuntime, RuntimeBuildError, RuntimeMode};
 use sdkwork_aiot_storage::{
@@ -581,7 +579,11 @@ impl AiotApiServer {
             .map_err(catalog_repository_error_to_response)
     }
 
-    fn delete_product(&self, context: &AiotRequestContext, product_id: &str) -> Result<(), HttpResponse> {
+    fn delete_product(
+        &self,
+        context: &AiotRequestContext,
+        product_id: &str,
+    ) -> Result<(), HttpResponse> {
         let association = request_context_to_storage_association(context)?;
         self.catalog_repository
             .delete_product(&association, product_id)
@@ -717,7 +719,10 @@ impl AiotApiServer {
         let association = request_context_to_storage_association(context)?;
         self.catalog_repository
             .get_capability_model(&association, capability_model_id)
-            .or_else(|| self.catalog_repository.get_seed_capability_model(capability_model_id))
+            .or_else(|| {
+                self.catalog_repository
+                    .get_seed_capability_model(capability_model_id)
+            })
             .ok_or_else(|| capability_model_not_found_response(capability_model_id))
     }
 
@@ -1385,7 +1390,17 @@ pub fn handle_resolved_api_request(
             .with_header("content-type", "application/json")
             .with_body(runtime_capacity_json()),
         (AiotApiSurface::Admin, "products.list") => {
-            standard_product_collection_response(&standard_product_catalog())
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_products(context) {
+                Ok(records) => standard_product_collection_response(&records),
+                Err(problem) => problem,
+            }
         }
         (AiotApiSurface::Admin, "products.create") => {
             let Some(context) = request_context else {
@@ -1451,7 +1466,17 @@ pub fn handle_resolved_api_request(
             }
         }
         (AiotApiSurface::Admin, "hardwareProfiles.list") => {
-            standard_hardware_profile_collection_response(&standard_hardware_profile_catalog())
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_hardware_profiles(context) {
+                Ok(records) => standard_hardware_profile_collection_response(&records),
+                Err(problem) => problem,
+            }
         }
         (AiotApiSurface::Admin, "hardwareProfiles.create") => {
             let Some(context) = request_context else {
@@ -1523,7 +1548,17 @@ pub fn handle_resolved_api_request(
             }
         }
         (AiotApiSurface::Admin, "protocolProfiles.list") => {
-            standard_protocol_profile_collection_response(&standard_protocol_profile_catalog())
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_protocol_profiles(context) {
+                Ok(records) => standard_protocol_profile_collection_response(&records),
+                Err(problem) => problem,
+            }
         }
         (AiotApiSurface::Admin, "protocolProfiles.create") => {
             let Some(context) = request_context else {
@@ -1595,7 +1630,17 @@ pub fn handle_resolved_api_request(
             }
         }
         (AiotApiSurface::Admin, "capabilityModels.list") => {
-            standard_capability_model_collection_response(&standard_capability_models())
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_capability_models(context) {
+                Ok(records) => standard_capability_model_collection_response(&records),
+                Err(problem) => problem,
+            }
         }
         (AiotApiSurface::Admin, "capabilityModels.create") => {
             let Some(context) = request_context else {
@@ -1610,7 +1655,9 @@ pub fn handle_resolved_api_request(
                 Err(problem) => return problem,
             };
             match server.create_capability_model(context, payload) {
-                Ok(record) => standard_capability_model_record_response(HttpStatus::Created, &record),
+                Ok(record) => {
+                    standard_capability_model_record_response(HttpStatus::Created, &record)
+                }
                 Err(problem) => problem,
             }
         }
@@ -1727,10 +1774,17 @@ pub fn handle_resolved_api_request(
             }
         }
         (AiotApiSurface::Admin, "capabilityModels.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
             let capability_model_id = capability_model_id
                 .as_deref()
                 .unwrap_or("unknown-capability-model");
-            match server.get_capability_model(capability_model_id) {
+            match server.get_capability_model(context, capability_model_id) {
                 Ok(record) => standard_capability_model_record_response(HttpStatus::Ok, &record),
                 Err(problem) => problem,
             }
@@ -2394,6 +2448,51 @@ fn firmware_repository_error_to_response(error: AiotFirmwareRepositoryError) -> 
     }
 }
 
+fn catalog_repository_error_to_response(error: AiotCatalogRepositoryError) -> HttpResponse {
+    match error {
+        AiotCatalogRepositoryError::DuplicateProductId => problem_response(
+            HttpStatus::Conflict,
+            "api.product.duplicate_id",
+            "Product id already exists",
+        ),
+        AiotCatalogRepositoryError::DuplicateHardwareProfileId => problem_response(
+            HttpStatus::Conflict,
+            "api.hardware_profile.duplicate_id",
+            "Hardware profile id already exists",
+        ),
+        AiotCatalogRepositoryError::DuplicateProtocolProfileId => problem_response(
+            HttpStatus::Conflict,
+            "api.protocol_profile.duplicate_id",
+            "Protocol profile id already exists",
+        ),
+        AiotCatalogRepositoryError::DuplicateCapabilityModelId => problem_response(
+            HttpStatus::Conflict,
+            "api.capability_model.duplicate_id",
+            "Capability model id already exists",
+        ),
+        AiotCatalogRepositoryError::ProductNotFound => problem_response(
+            HttpStatus::NotFound,
+            "api.product.not_found",
+            "Product not found",
+        ),
+        AiotCatalogRepositoryError::HardwareProfileNotFound => problem_response(
+            HttpStatus::NotFound,
+            "api.hardware_profile.not_found",
+            "Hardware profile not found",
+        ),
+        AiotCatalogRepositoryError::ProtocolProfileNotFound => problem_response(
+            HttpStatus::NotFound,
+            "api.protocol_profile.not_found",
+            "Protocol profile not found",
+        ),
+        AiotCatalogRepositoryError::CapabilityModelNotFound => problem_response(
+            HttpStatus::NotFound,
+            "api.capability_model.not_found",
+            "Capability model not found",
+        ),
+    }
+}
+
 fn protocol_adapters_json(runtime: &AiotRuntime) -> String {
     let adapters = runtime
         .protocol_routes()
@@ -2469,13 +2568,6 @@ fn runtime_capacity_json() -> String {
     )
 }
 
-fn standard_product_catalog() -> Vec<Product> {
-    vec![
-        Product::new("9001", "Xiaozhi Voice Assistant"),
-        Product::new("9002", "Edge Audio Gateway"),
-    ]
-}
-
 fn standard_product_records() -> Vec<AiotProductRecord> {
     vec![
         AiotProductRecord {
@@ -2494,33 +2586,6 @@ fn standard_product_records() -> Vec<AiotProductRecord> {
             default_capability_model_id: "capmodel-edge-gateway".to_string(),
             status: "active".to_string(),
         },
-    ]
-}
-
-fn standard_hardware_profile_catalog() -> Vec<HardwareProfile> {
-    vec![
-        HardwareProfile::new("hw-esp32-s3", "esp32_s3")
-            .with_hardware_class(HardwareClass::Mcu)
-            .with_runtime("esp_idf")
-            .with_runtime("freertos")
-            .with_connectivity("wifi")
-            .with_connectivity("ble")
-            .with_security_profile("secure_boot")
-            .with_security_profile("flash_encryption")
-            .with_security_profile("device_secret")
-            .with_ota_profile("xiaozhi_ota"),
-        HardwareProfile::new("hw-raspberry-pi-5", "bcm2712")
-            .with_hardware_class(HardwareClass::LinuxSbc)
-            .with_hardware_class(HardwareClass::EdgeGateway)
-            .with_runtime("linux")
-            .with_runtime("docker")
-            .with_runtime("home_assistant")
-            .with_connectivity("ethernet")
-            .with_connectivity("wifi")
-            .with_connectivity("zigbee_usb")
-            .with_security_profile("tpm")
-            .with_security_profile("secure_boot")
-            .with_ota_profile("apt_container_image"),
     ]
 }
 
@@ -2673,7 +2738,7 @@ fn standard_capability_model_records() -> Vec<AiotCapabilityModelRecord> {
         .collect()
 }
 
-fn standard_product_collection_response(products: &[Product]) -> HttpResponse {
+fn standard_product_collection_response(products: &[AiotProductRecord]) -> HttpResponse {
     let items = products
         .iter()
         .map(product_resource_json)
@@ -2684,7 +2749,13 @@ fn standard_product_collection_response(products: &[Product]) -> HttpResponse {
         .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
 }
 
-fn standard_hardware_profile_collection_response(profiles: &[HardwareProfile]) -> HttpResponse {
+fn standard_product_response(status: HttpStatus, product: &AiotProductRecord) -> HttpResponse {
+    standard_resource_response(status, product_resource_json(product))
+}
+
+fn standard_hardware_profile_collection_response(
+    profiles: &[AiotHardwareProfileRecord],
+) -> HttpResponse {
     let items = profiles
         .iter()
         .map(hardware_profile_resource_json)
@@ -2695,11 +2766,19 @@ fn standard_hardware_profile_collection_response(profiles: &[HardwareProfile]) -
         .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
 }
 
-fn standard_protocol_profile_collection_response(profiles: &[ProtocolProfile]) -> HttpResponse {
-    let protocol_catalog = standard_protocol_catalog();
+fn standard_hardware_profile_response(
+    status: HttpStatus,
+    profile: &AiotHardwareProfileRecord,
+) -> HttpResponse {
+    standard_resource_response(status, hardware_profile_resource_json(profile))
+}
+
+fn standard_protocol_profile_collection_response(
+    profiles: &[AiotProtocolProfileRecord],
+) -> HttpResponse {
     let items = profiles
         .iter()
-        .map(|profile| protocol_profile_resource_json(profile, &protocol_catalog))
+        .map(protocol_profile_resource_json)
         .collect::<Vec<_>>()
         .join(",");
     HttpResponse::new(HttpStatus::Ok)
@@ -2707,95 +2786,73 @@ fn standard_protocol_profile_collection_response(profiles: &[ProtocolProfile]) -
         .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
 }
 
-fn standard_capability_model_response(capability_model_id: &str) -> HttpResponse {
-    let models = standard_capability_models();
-    let Some(model) = models
-        .iter()
-        .find(|model| model.capability_model_id == capability_model_id)
-    else {
-        return problem_response(
-            HttpStatus::NotFound,
-            "api.capability_model.not_found",
-            "Capability model not found",
-        );
-    };
-
-    standard_resource_response(HttpStatus::Ok, capability_model_resource_json(model))
+fn standard_protocol_profile_response(
+    status: HttpStatus,
+    profile: &AiotProtocolProfileRecord,
+) -> HttpResponse {
+    standard_resource_response(status, protocol_profile_resource_json(profile))
 }
 
-fn product_resource_json(product: &Product) -> String {
+fn standard_capability_model_collection_response(
+    models: &[AiotCapabilityModelRecord],
+) -> HttpResponse {
+    let items = models
+        .iter()
+        .map(capability_model_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn standard_capability_model_record_response(
+    status: HttpStatus,
+    model: &AiotCapabilityModelRecord,
+) -> HttpResponse {
+    standard_resource_response(status, capability_model_resource_json(model))
+}
+
+fn product_resource_json(product: &AiotProductRecord) -> String {
     format!(
-        r#"{{"productId":"{}","displayName":"{}","defaultHardwareProfileId":"{}","defaultProtocolProfileId":"{}","defaultCapabilityModelId":"{}","status":"active"}}"#,
+        r#"{{"productId":"{}","displayName":"{}","defaultHardwareProfileId":"{}","defaultProtocolProfileId":"{}","defaultCapabilityModelId":"{}","status":"{}"}}"#,
         json_escape(&product.product_id),
         json_escape(&product.display_name),
-        if product.product_id == "9002" {
-            "hw-raspberry-pi-5"
-        } else {
-            "hw-esp32-s3"
-        },
-        if product.product_id == "9002" {
-            "proto-mqtt-standard"
-        } else {
-            "proto-xiaozhi"
-        },
-        if product.product_id == "9002" {
-            "capmodel-edge-gateway"
-        } else {
-            "capmodel-xiaozhi-core"
-        },
+        json_escape(&product.default_hardware_profile_id),
+        json_escape(&product.default_protocol_profile_id),
+        json_escape(&product.default_capability_model_id),
+        json_escape(&product.status),
     )
 }
 
-fn hardware_profile_resource_json(profile: &HardwareProfile) -> String {
-    let classes = profile
-        .hardware_classes
-        .iter()
-        .map(hardware_class_name)
-        .collect::<Vec<_>>();
+fn hardware_profile_resource_json(profile: &AiotHardwareProfileRecord) -> String {
     format!(
-        r#"{{"hardwareProfileId":"{}","chipFamily":"{}","hardwareClasses":[{}],"runtimeProfiles":[{}],"connectivityProfiles":[{}],"securityProfiles":[{}],"otaProfiles":[{}]}}"#,
-        json_escape(&profile.profile_id),
+        r#"{{"hardwareProfileId":"{}","chipFamily":"{}","hardwareClasses":[{}],"runtimeProfiles":[{}],"connectivityProfiles":[{}],"securityProfiles":[{}],"otaProfiles":[{}],"status":"{}"}}"#,
+        json_escape(&profile.hardware_profile_id),
         json_escape(&profile.chip_family),
-        str_array(classes.iter().copied()),
+        string_array(profile.hardware_classes.iter()),
         string_array(profile.runtime_profiles.iter()),
         string_array(profile.connectivity_profiles.iter()),
         string_array(profile.security_profiles.iter()),
         string_array(profile.ota_profiles.iter()),
+        json_escape(&profile.status),
     )
 }
 
-fn protocol_profile_resource_json(
-    profile: &ProtocolProfile,
-    catalog: &[sdkwork_aiot_protocol::ProtocolCatalogEntry],
-) -> String {
-    let capability_bridges = catalog
-        .iter()
-        .find(|entry| entry.protocol_id == profile.default_protocol_id)
-        .map(|entry| {
-            entry
-                .capability_bridges
-                .iter()
-                .map(capability_bridge_name)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let scope = catalog
-        .iter()
-        .find(|entry| entry.protocol_id == profile.default_protocol_id)
-        .map(|entry| protocol_scope_name(entry.scope))
-        .unwrap_or("StandardAdapter");
+fn protocol_profile_resource_json(profile: &AiotProtocolProfileRecord) -> String {
     format!(
-        r#"{{"protocolProfileId":"{}","defaultProtocolId":"{}","scope":"{}","allowedTransports":[{}],"allowedMessageClasses":[{}],"capabilityBridges":[{}]}}"#,
-        json_escape(&profile.profile_id),
+        r#"{{"protocolProfileId":"{}","defaultProtocolId":"{}","scope":"{}","allowedTransports":[{}],"allowedMessageClasses":[{}],"capabilityBridges":[{}],"status":"{}"}}"#,
+        json_escape(&profile.protocol_profile_id),
         json_escape(&profile.default_protocol_id),
-        scope,
+        json_escape(&profile.scope),
         string_array(profile.allowed_transports.iter()),
         string_array(profile.allowed_message_classes.iter()),
-        str_array(capability_bridges.iter().copied()),
+        string_array(profile.capability_bridges.iter()),
+        json_escape(&profile.status),
     )
 }
 
-fn capability_model_resource_json(model: &AiotCapabilityModel) -> String {
+fn capability_model_resource_json(model: &AiotCapabilityModelRecord) -> String {
     let capabilities = model
         .capabilities
         .iter()
@@ -2803,11 +2860,12 @@ fn capability_model_resource_json(model: &AiotCapabilityModel) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        r#"{{"capabilityModelId":"{}","displayName":"{}","version":"{}","capabilities":[{}]}}"#,
+        r#"{{"capabilityModelId":"{}","displayName":"{}","version":"{}","capabilities":[{}],"status":"{}"}}"#,
         json_escape(&model.capability_model_id),
         json_escape(&model.display_name),
         json_escape(&model.version),
         capabilities,
+        json_escape(&model.status),
     )
 }
 
@@ -3470,6 +3528,18 @@ impl InMemoryAiotCatalogRepository {
             .cloned()
     }
 
+    fn list_products(&self, association: &AiotStorageAssociation) -> Vec<AiotProductRecord> {
+        let prefix = scoped_catalog_prefix(association);
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .products
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .map(|(_, record)| record.clone())
+            .collect()
+    }
+
     fn update_product(
         &self,
         association: AiotStorageAssociation,
@@ -3548,6 +3618,21 @@ impl InMemoryAiotCatalogRepository {
             .hardware_profiles
             .get(&scoped_catalog_key(association, hardware_profile_id))
             .cloned()
+    }
+
+    fn list_hardware_profiles(
+        &self,
+        association: &AiotStorageAssociation,
+    ) -> Vec<AiotHardwareProfileRecord> {
+        let prefix = scoped_catalog_prefix(association);
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .hardware_profiles
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .map(|(_, record)| record.clone())
+            .collect()
     }
 
     fn update_hardware_profile(
@@ -3635,6 +3720,21 @@ impl InMemoryAiotCatalogRepository {
             .cloned()
     }
 
+    fn list_protocol_profiles(
+        &self,
+        association: &AiotStorageAssociation,
+    ) -> Vec<AiotProtocolProfileRecord> {
+        let prefix = scoped_catalog_prefix(association);
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .protocol_profiles
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .map(|(_, record)| record.clone())
+            .collect()
+    }
+
     fn update_protocol_profile(
         &self,
         association: AiotStorageAssociation,
@@ -3702,10 +3802,41 @@ impl InMemoryAiotCatalogRepository {
         Ok(record)
     }
 
-    fn get_seed_capability_model(&self, capability_model_id: &str) -> Option<AiotCapabilityModelRecord> {
+    fn get_seed_capability_model(
+        &self,
+        capability_model_id: &str,
+    ) -> Option<AiotCapabilityModelRecord> {
         standard_capability_model_records()
             .into_iter()
             .find(|record| record.capability_model_id == capability_model_id)
+    }
+
+    fn get_capability_model(
+        &self,
+        association: &AiotStorageAssociation,
+        capability_model_id: &str,
+    ) -> Option<AiotCapabilityModelRecord> {
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .capability_models
+            .get(&scoped_catalog_key(association, capability_model_id))
+            .cloned()
+    }
+
+    fn list_capability_models(
+        &self,
+        association: &AiotStorageAssociation,
+    ) -> Vec<AiotCapabilityModelRecord> {
+        let prefix = scoped_catalog_prefix(association);
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .capability_models
+            .iter()
+            .filter(|(key, _)| key.starts_with(&prefix))
+            .map(|(_, record)| record.clone())
+            .collect()
     }
 
     fn update_capability_model(
@@ -3774,6 +3905,14 @@ fn scoped_device_credential_key(
     )
 }
 
+fn scoped_catalog_key(association: &AiotStorageAssociation, catalog_id: &str) -> String {
+    format!("{}{}", scoped_catalog_prefix(association), catalog_id)
+}
+
+fn scoped_catalog_prefix(association: &AiotStorageAssociation) -> String {
+    format!("{}:{}:", association.tenant_id, association.organization_id)
+}
+
 #[derive(Debug, Clone)]
 struct AiotDeviceCreatePayload {
     device_id: String,
@@ -3807,6 +3946,173 @@ struct AiotDeviceUpdatePayload {
     display_name: Option<String>,
     status: Option<String>,
     metadata_json: Option<String>,
+}
+
+fn required_json_object_body(
+    request: &HttpRequest,
+) -> Result<JsonMap<String, JsonValue>, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    body.as_object().cloned().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })
+}
+
+fn optional_json_object_body(
+    request: &HttpRequest,
+) -> Result<JsonMap<String, JsonValue>, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Ok(JsonMap::new());
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    body.as_object().cloned().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })
+}
+
+fn product_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotProductCreatePayload, HttpResponse> {
+    let obj = required_json_object_body(request)?;
+    Ok(AiotProductCreatePayload {
+        product_id: required_json_string_field(&obj, "productId")?,
+        display_name: required_json_string_field(&obj, "displayName")?,
+        default_hardware_profile_id: required_json_string_field(&obj, "defaultHardwareProfileId")?,
+        default_protocol_profile_id: required_json_string_field(&obj, "defaultProtocolProfileId")?,
+        default_capability_model_id: required_json_string_field(&obj, "defaultCapabilityModelId")?,
+    })
+}
+
+fn product_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotProductUpdatePayload, HttpResponse> {
+    let obj = optional_json_object_body(request)?;
+    Ok(AiotProductUpdatePayload {
+        display_name: optional_json_string_field(&obj, "displayName"),
+        default_hardware_profile_id: optional_json_string_field(&obj, "defaultHardwareProfileId"),
+        default_protocol_profile_id: optional_json_string_field(&obj, "defaultProtocolProfileId"),
+        default_capability_model_id: optional_json_string_field(&obj, "defaultCapabilityModelId"),
+        status: optional_json_string_field(&obj, "status"),
+    })
+}
+
+fn hardware_profile_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotHardwareProfileCreatePayload, HttpResponse> {
+    let obj = required_json_object_body(request)?;
+    Ok(AiotHardwareProfileCreatePayload {
+        hardware_profile_id: required_json_string_field(&obj, "hardwareProfileId")?,
+        chip_family: required_json_string_field(&obj, "chipFamily")?,
+        hardware_classes: optional_json_string_array_field(&obj, "hardwareClasses")?
+            .unwrap_or_default(),
+        runtime_profiles: optional_json_string_array_field(&obj, "runtimeProfiles")?
+            .unwrap_or_default(),
+        connectivity_profiles: optional_json_string_array_field(&obj, "connectivityProfiles")?
+            .unwrap_or_default(),
+        security_profiles: optional_json_string_array_field(&obj, "securityProfiles")?
+            .unwrap_or_default(),
+        ota_profiles: optional_json_string_array_field(&obj, "otaProfiles")?.unwrap_or_default(),
+    })
+}
+
+fn hardware_profile_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotHardwareProfileUpdatePayload, HttpResponse> {
+    let obj = optional_json_object_body(request)?;
+    Ok(AiotHardwareProfileUpdatePayload {
+        chip_family: optional_json_string_field(&obj, "chipFamily"),
+        hardware_classes: optional_json_string_array_field(&obj, "hardwareClasses")?,
+        runtime_profiles: optional_json_string_array_field(&obj, "runtimeProfiles")?,
+        connectivity_profiles: optional_json_string_array_field(&obj, "connectivityProfiles")?,
+        security_profiles: optional_json_string_array_field(&obj, "securityProfiles")?,
+        ota_profiles: optional_json_string_array_field(&obj, "otaProfiles")?,
+        status: optional_json_string_field(&obj, "status"),
+    })
+}
+
+fn protocol_profile_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotProtocolProfileCreatePayload, HttpResponse> {
+    let obj = required_json_object_body(request)?;
+    Ok(AiotProtocolProfileCreatePayload {
+        protocol_profile_id: required_json_string_field(&obj, "protocolProfileId")?,
+        default_protocol_id: required_json_string_field(&obj, "defaultProtocolId")?,
+        scope: optional_json_string_field(&obj, "scope")
+            .unwrap_or_else(|| "StandardAdapter".to_string()),
+        allowed_transports: optional_json_string_array_field(&obj, "allowedTransports")?
+            .unwrap_or_default(),
+        allowed_message_classes: optional_json_string_array_field(&obj, "allowedMessageClasses")?
+            .unwrap_or_default(),
+        capability_bridges: optional_json_string_array_field(&obj, "capabilityBridges")?
+            .unwrap_or_default(),
+    })
+}
+
+fn protocol_profile_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotProtocolProfileUpdatePayload, HttpResponse> {
+    let obj = optional_json_object_body(request)?;
+    Ok(AiotProtocolProfileUpdatePayload {
+        default_protocol_id: optional_json_string_field(&obj, "defaultProtocolId"),
+        scope: optional_json_string_field(&obj, "scope"),
+        allowed_transports: optional_json_string_array_field(&obj, "allowedTransports")?,
+        allowed_message_classes: optional_json_string_array_field(&obj, "allowedMessageClasses")?,
+        capability_bridges: optional_json_string_array_field(&obj, "capabilityBridges")?,
+        status: optional_json_string_field(&obj, "status"),
+    })
+}
+
+fn capability_model_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotCapabilityModelCreatePayload, HttpResponse> {
+    let obj = required_json_object_body(request)?;
+    Ok(AiotCapabilityModelCreatePayload {
+        capability_model_id: required_json_string_field(&obj, "capabilityModelId")?,
+        display_name: required_json_string_field(&obj, "displayName")?,
+        version: required_json_string_field(&obj, "version")?,
+        capabilities: optional_json_capability_definitions_field(&obj, "capabilities")?
+            .unwrap_or_default(),
+    })
+}
+
+fn capability_model_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotCapabilityModelUpdatePayload, HttpResponse> {
+    let obj = optional_json_object_body(request)?;
+    Ok(AiotCapabilityModelUpdatePayload {
+        display_name: optional_json_string_field(&obj, "displayName"),
+        version: optional_json_string_field(&obj, "version"),
+        capabilities: optional_json_capability_definitions_field(&obj, "capabilities")?,
+        status: optional_json_string_field(&obj, "status"),
+    })
 }
 
 fn device_create_payload_from_request(
@@ -4253,6 +4559,126 @@ fn optional_json_string_field(obj: &JsonMap<String, JsonValue>, field: &str) -> 
         .map(str::to_string)
 }
 
+fn optional_json_string_array_field(
+    obj: &JsonMap<String, JsonValue>,
+    field: &str,
+) -> Result<Option<Vec<String>>, HttpResponse> {
+    let Some(value) = obj.get(field) else {
+        return Ok(None);
+    };
+    let Some(values) = value.as_array() else {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            &format!("Field {field} must be a string array"),
+        ));
+    };
+
+    let mut parsed = Vec::with_capacity(values.len());
+    for value in values {
+        let Some(item) = value.as_str() else {
+            return Err(problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                &format!("Field {field} must be a string array"),
+            ));
+        };
+        parsed.push(item.to_string());
+    }
+    Ok(Some(parsed))
+}
+
+fn optional_json_capability_definitions_field(
+    obj: &JsonMap<String, JsonValue>,
+    field: &str,
+) -> Result<Option<Vec<CapabilityDefinition>>, HttpResponse> {
+    let Some(value) = obj.get(field) else {
+        return Ok(None);
+    };
+    let Some(values) = value.as_array() else {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            &format!("Field {field} must be an array"),
+        ));
+    };
+
+    let mut definitions = Vec::with_capacity(values.len());
+    for value in values {
+        definitions.push(capability_definition_from_json(value)?);
+    }
+    Ok(Some(definitions))
+}
+
+fn capability_definition_from_json(
+    value: &JsonValue,
+) -> Result<CapabilityDefinition, HttpResponse> {
+    let Some(obj) = value.as_object() else {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            "Capability definitions must be JSON objects",
+        ));
+    };
+
+    let capability_name = required_json_string_field(obj, "capabilityName")
+        .or_else(|_| required_json_string_field(obj, "name"))?;
+    let capability_kind = required_json_string_field(obj, "capabilityKind")
+        .or_else(|_| required_json_string_field(obj, "kind"))?;
+    let mut definition = CapabilityDefinition::new(
+        capability_name,
+        capability_kind_from_name(&capability_kind).ok_or_else(|| {
+            problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field capabilityKind must be a known capability kind",
+            )
+        })?,
+    );
+
+    for command in optional_json_string_array_field(obj, "commands")?.unwrap_or_default() {
+        definition = definition.with_command(command);
+    }
+    for event in optional_json_string_array_field(obj, "events")?.unwrap_or_default() {
+        definition = definition.with_event(event);
+    }
+    if let Some(mappings) = obj.get("protocolMappings") {
+        let Some(mappings) = mappings.as_array() else {
+            return Err(problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field protocolMappings must be an array",
+            ));
+        };
+        for mapping in mappings {
+            let Some(mapping) = mapping.as_object() else {
+                return Err(problem_response(
+                    HttpStatus::BadRequest,
+                    "api.request.invalid_field",
+                    "Protocol mappings must be JSON objects",
+                ));
+            };
+            let protocol_id = required_json_string_field(mapping, "protocolId")?;
+            let mapped_name = required_json_string_field(mapping, "mappedName")?;
+            definition = definition.with_protocol_mapping(protocol_id, mapped_name);
+        }
+    }
+
+    Ok(definition)
+}
+
+fn capability_kind_from_name(value: &str) -> Option<CapabilityKind> {
+    match value {
+        "property" | "Property" => Some(CapabilityKind::Property),
+        "command" | "Command" => Some(CapabilityKind::Command),
+        "event" | "Event" => Some(CapabilityKind::Event),
+        "telemetry" | "Telemetry" => Some(CapabilityKind::Telemetry),
+        "media" | "Media" => Some(CapabilityKind::Media),
+        "ota" | "Ota" | "OTA" => Some(CapabilityKind::Ota),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone)]
 struct AiotCommandCreatePayload {
     capability_name: String,
@@ -4659,20 +5085,6 @@ fn device_resource_json(device: &AiotDeviceRecord) -> String {
     )
 }
 
-fn hardware_class_name(class: &HardwareClass) -> &'static str {
-    match class {
-        HardwareClass::Unspecified => "unspecified",
-        HardwareClass::Mcu => "mcu",
-        HardwareClass::LinuxSbc => "linux_sbc",
-        HardwareClass::EdgeGateway => "edge_gateway",
-        HardwareClass::IndustrialController => "industrial_controller",
-        HardwareClass::CameraDevice => "camera_device",
-        HardwareClass::AudioDevice => "audio_device",
-        HardwareClass::CellularModule => "cellular_module",
-        HardwareClass::BridgeAdapter => "bridge_adapter",
-    }
-}
-
 fn capability_kind_name(kind: CapabilityKind) -> &'static str {
     match kind {
         CapabilityKind::Property => "property",
@@ -4758,6 +5170,42 @@ fn device_not_found_response(device_id: &str) -> HttpResponse {
         ))
 }
 
+fn product_not_found_response(product_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.product.not_found","productId":"{}"}}"#,
+            json_escape(product_id)
+        ))
+}
+
+fn hardware_profile_not_found_response(hardware_profile_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.hardware_profile.not_found","hardwareProfileId":"{}"}}"#,
+            json_escape(hardware_profile_id)
+        ))
+}
+
+fn protocol_profile_not_found_response(protocol_profile_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.protocol_profile.not_found","protocolProfileId":"{}"}}"#,
+            json_escape(protocol_profile_id)
+        ))
+}
+
+fn capability_model_not_found_response(capability_model_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Capability model not found","status":404,"code":"api.capability_model.not_found","capabilityModelId":"{}"}}"#,
+            json_escape(capability_model_id)
+        ))
+}
+
 fn credential_not_found_response(credential_id: &str) -> HttpResponse {
     HttpResponse::new(HttpStatus::NotFound)
         .with_header("content-type", "application/problem+json")
@@ -4832,17 +5280,6 @@ where
 fn string_array<'a, I>(values: I) -> String
 where
     I: IntoIterator<Item = &'a String>,
-{
-    values
-        .into_iter()
-        .map(|value| format!(r#""{}""#, json_escape(value)))
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-fn str_array<'a, I>(values: I) -> String
-where
-    I: IntoIterator<Item = &'a str>,
 {
     values
         .into_iter()

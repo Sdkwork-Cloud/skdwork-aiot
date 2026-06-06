@@ -3654,6 +3654,7 @@ mod tests {
 
     #[test]
     fn file_backed_activation_registry_round_trip_and_consume_once() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry");
         let registry = FileBackedXiaozhiActivationChallengeRegistry::new(path.clone());
         let request = HttpRequest::new("POST", "/iot/xiaozhi/ota")
@@ -3669,6 +3670,7 @@ mod tests {
 
     #[test]
     fn file_backed_activation_registry_reload_supports_restart_semantics() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry-reload");
         let request = HttpRequest::new("POST", "/iot/xiaozhi/ota")
             .with_header("device-id", "device-02")
@@ -3734,6 +3736,7 @@ mod tests {
 
     #[test]
     fn file_backed_registry_keeps_both_entries_across_two_instances() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry-two-instances");
         let request_a = HttpRequest::new("POST", "/iot/xiaozhi/ota")
             .with_header("device-id", "device-a")
@@ -3769,6 +3772,7 @@ mod tests {
 
     #[test]
     fn sqlite_activation_registry_round_trip_and_consume_once() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry-sqlite");
         let registry = SqliteXiaozhiActivationChallengeRegistry::new(path.clone());
         let request = HttpRequest::new("POST", "/iot/xiaozhi/ota")
@@ -3784,6 +3788,7 @@ mod tests {
 
     #[test]
     fn sqlite_activation_registry_reload_supports_restart_semantics() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry-sqlite-reload");
         let request = HttpRequest::new("POST", "/iot/xiaozhi/ota")
             .with_header("device-id", "device-sqlite-02")
@@ -3802,6 +3807,7 @@ mod tests {
 
     #[test]
     fn sqlite_activation_registry_keeps_both_entries_across_two_instances() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry-sqlite-two-instances");
         let request_a = HttpRequest::new("POST", "/iot/xiaozhi/ota")
             .with_header("device-id", "device-a")
@@ -3826,6 +3832,7 @@ mod tests {
 
     #[test]
     fn sqlite_activation_registry_rejects_expired_entries() {
+        let _lock = lock_activation_registry_stats_for_test();
         let path = unique_test_file_path("activation-registry-sqlite-expired");
         let request = HttpRequest::new("POST", "/iot/xiaozhi/ota")
             .with_header("device-id", "device-sqlite-exp")
@@ -4111,7 +4118,7 @@ mod tests {
 
     fn lock_activation_registry_stats_for_test() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        LOCK.lock().expect("activation registry stats test lock")
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     struct EnvGuard {
