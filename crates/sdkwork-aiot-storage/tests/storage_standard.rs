@@ -1,9 +1,16 @@
 use sdkwork_aiot_storage::{
     standard_dead_letter_reason_catalog, standard_protocol_ingest_storage_ports, table_contract,
-    AiotOutboxWriteIntent, AiotProtocolDeadLetterIntent, AiotProtocolIngestUnitOfWork,
-    AiotProtocolStorageCommand, AiotRetryPolicy, AiotStorageAssociation, AiotStorageFailure,
-    AiotStorageFailureDisposition, AiotStorageWriteKind, AiotStorageWriteReceipt, AiotTable,
-    InMemoryProtocolIngestUnitOfWork, TableProfile, IOT_DATABASE_PREFIX, IOT_TABLES,
+    AiotCommandCreateCommand, AiotCommandRepository, AiotDeviceCreateCommand,
+    AiotDeviceEventCreateCommand, AiotDeviceRepository, AiotDeviceRepositoryError,
+    AiotDeviceSessionRepository, AiotDeviceTwinRepository, AiotDeviceUpdateCommand,
+    AiotEventRepository, AiotOutboxWriteIntent, AiotProtocolDeadLetterIntent,
+    AiotProtocolIngestUnitOfWork, AiotProtocolStorageCommand, AiotRetryPolicy,
+    AiotStorageAssociation, AiotStorageFailure, AiotStorageFailureDisposition,
+    AiotStorageWriteKind, AiotStorageWriteReceipt, AiotTable, AiotTwinPropertyUpsertCommand,
+    InMemoryAiotCommandRepository, InMemoryAiotDeviceRepository,
+    InMemoryAiotDeviceSessionRepository, InMemoryAiotDeviceTwinRepository,
+    InMemoryAiotEventRepository, InMemoryProtocolIngestUnitOfWork, TableProfile,
+    IOT_DATABASE_PREFIX, IOT_TABLES,
 };
 
 #[test]
@@ -13,6 +20,8 @@ fn table_catalog_uses_iot_prefix_and_declares_core_groups() {
         .all(|table| table.name.starts_with("iot_")));
     assert!(IOT_TABLES.contains(&AiotTable::new("iot_device", "device_registry")));
     assert!(IOT_TABLES.contains(&AiotTable::new("iot_command", "command_control")));
+    assert!(IOT_TABLES.contains(&AiotTable::new("iot_media_resource", "media_resource")));
+    assert!(IOT_TABLES.contains(&AiotTable::new("iot_device_media", "media_resource")));
     assert!(IOT_TABLES.contains(&AiotTable::new("iot_outbox_event", "eventing")));
 }
 
@@ -39,6 +48,8 @@ fn table_contract_declares_sdkwork_database_boundary_rules() {
     assert_eq!(outbox.profile, TableProfile::OutboxEvent);
     assert!(outbox.required_columns.contains(&"event_type"));
     assert!(outbox.required_columns.contains(&"aggregate_id"));
+    assert!(outbox.required_columns.contains(&"event_version"));
+    assert!(outbox.required_columns.contains(&"payload_hash"));
 }
 
 #[test]
@@ -74,6 +85,7 @@ fn every_catalog_table_has_a_contract() {
 fn protocol_ingest_storage_ports_define_unit_of_work_boundaries() {
     let ports = standard_protocol_ingest_storage_ports();
 
+    assert!(ports.contains(&"DeviceRepository"));
     assert!(ports.contains(&"DeviceSessionRepository"));
     assert!(ports.contains(&"TelemetryRepository"));
     assert!(ports.contains(&"DeviceTwinRepository"));
@@ -81,6 +93,315 @@ fn protocol_ingest_storage_ports_define_unit_of_work_boundaries() {
     assert!(ports.contains(&"FirmwareDeploymentRepository"));
     assert!(ports.contains(&"ProtocolDeadLetterRepository"));
     assert!(ports.contains(&"OutboxEventRepository"));
+}
+
+#[test]
+fn in_memory_device_repository_supports_scoped_crud_lifecycle() {
+    let repo = InMemoryAiotDeviceRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+    let create =
+        AiotDeviceCreateCommand::new(association.clone(), "device-001", "Front Door", "1001")
+            .with_client_id("client-1")
+            .with_chip_family("esp32_s3");
+
+    let created = repo.create_device(create).expect("create device");
+    assert_eq!(created.id, "1");
+    assert_eq!(created.device_id, "device-001");
+    assert_eq!(created.display_name, "Front Door");
+    assert_eq!(created.product_id, "1001");
+    assert_eq!(created.status, "active");
+
+    let listed = repo.list_devices(&association);
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].device_id, "device-001");
+
+    let retrieved = repo
+        .get_device(&association, "device-001")
+        .expect("retrieve device");
+    assert_eq!(retrieved.display_name, "Front Door");
+
+    let updated = repo
+        .update_device(
+            AiotDeviceUpdateCommand::new(association.clone(), "device-001")
+                .with_display_name("Front Door Updated")
+                .with_status("inactive")
+                .with_metadata_json(r#"{"firmware":"1.0.1"}"#),
+        )
+        .expect("update device");
+    assert_eq!(updated.display_name, "Front Door Updated");
+    assert_eq!(updated.status, "inactive");
+    assert_eq!(
+        updated.metadata_json.as_deref(),
+        Some(r#"{"firmware":"1.0.1"}"#)
+    );
+
+    repo.delete_device(&association, "device-001")
+        .expect("delete device");
+    assert!(repo.get_device(&association, "device-001").is_none());
+}
+
+#[test]
+fn in_memory_device_repository_rejects_duplicate_and_cross_scope_operations() {
+    let repo = InMemoryAiotDeviceRepository::new();
+    let assoc_a = AiotStorageAssociation::tenant_org(10001, 20001);
+    let assoc_b = AiotStorageAssociation::tenant_org(10002, 20002);
+
+    repo.create_device(AiotDeviceCreateCommand::new(
+        assoc_a.clone(),
+        "shared-device",
+        "A",
+        "1001",
+    ))
+    .expect("create scoped device");
+
+    let duplicate = repo.create_device(AiotDeviceCreateCommand::new(
+        assoc_a.clone(),
+        "shared-device",
+        "A2",
+        "1002",
+    ));
+    assert_eq!(
+        duplicate.err(),
+        Some(AiotDeviceRepositoryError::DuplicateDeviceId)
+    );
+
+    // Same device id in different tenant/org scope is allowed.
+    repo.create_device(AiotDeviceCreateCommand::new(
+        assoc_b.clone(),
+        "shared-device",
+        "B",
+        "2001",
+    ))
+    .expect("create cross-scope device");
+
+    assert_eq!(repo.list_devices(&assoc_a).len(), 1);
+    assert_eq!(repo.list_devices(&assoc_b).len(), 1);
+    assert_eq!(
+        repo.get_device(&assoc_b, "shared-device")
+            .unwrap()
+            .display_name,
+        "B"
+    );
+    assert_eq!(
+        repo.update_device(
+            AiotDeviceUpdateCommand::new(assoc_b.clone(), "missing").with_status("inactive")
+        )
+        .err(),
+        Some(AiotDeviceRepositoryError::NotFound)
+    );
+}
+
+#[test]
+fn in_memory_device_repository_rejects_non_numeric_product_id() {
+    let repo = InMemoryAiotDeviceRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    let result = repo.create_device(AiotDeviceCreateCommand::new(
+        association,
+        "device-invalid-product",
+        "Invalid Product",
+        "product-alpha",
+    ));
+
+    assert_eq!(
+        result.err(),
+        Some(AiotDeviceRepositoryError::InvalidProductId)
+    );
+}
+
+#[test]
+fn in_memory_command_repository_supports_create_and_scoped_list() {
+    let repo = InMemoryAiotCommandRepository::new();
+    let assoc_a = AiotStorageAssociation::tenant_org(10001, 20001);
+    let assoc_b = AiotStorageAssociation::tenant_org(10002, 20002);
+
+    let created = repo
+        .create_command(
+            AiotCommandCreateCommand::new(
+                assoc_a.clone(),
+                "device-001",
+                "speaker",
+                "play",
+            )
+            .with_request_payload_json(r#"{"text":"hello"}"#)
+            .with_request_media(
+                Some("media-res-001".to_string()),
+                Some("obj-blob-001".to_string()),
+                Some(
+                    r#"{"id":"media-res-001","kind":"audio","source":"object_storage","objectBlobId":"obj-blob-001","mimeType":"audio/opus","sizeBytes":"4096"}"#
+                        .to_string(),
+                ),
+            )
+            .with_trace_id("trace-001"),
+        )
+        .expect("create command");
+    assert_eq!(created.device_id, "device-001");
+    assert_eq!(created.capability_name, "speaker");
+    assert_eq!(created.command_name, "play");
+
+    repo.create_command(AiotCommandCreateCommand::new(
+        assoc_b.clone(),
+        "device-001",
+        "speaker",
+        "play",
+    ))
+    .expect("create command in other tenant");
+
+    let list_a = repo
+        .list_commands(&assoc_a, "device-001")
+        .expect("list commands in tenant a");
+    let list_b = repo
+        .list_commands(&assoc_b, "device-001")
+        .expect("list commands in tenant b");
+    assert_eq!(list_a.len(), 1);
+    assert_eq!(list_b.len(), 1);
+    assert_eq!(
+        list_a[0].request_media_resource_id.as_deref(),
+        Some("media-res-001")
+    );
+}
+
+#[test]
+fn in_memory_command_repository_supports_cancel_command() {
+    let repo = InMemoryAiotCommandRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    let created = repo
+        .create_command(
+            AiotCommandCreateCommand::new(
+                association.clone(),
+                "device-cancel-001",
+                "speaker",
+                "play",
+            )
+            .with_command_id("cmd-cancel-001"),
+        )
+        .expect("create command");
+    assert_eq!(created.status, "accepted");
+
+    let cancelled = repo
+        .cancel_command(&association, "device-cancel-001", "cmd-cancel-001")
+        .expect("cancel command")
+        .expect("command exists");
+    assert_eq!(cancelled.status, "cancelled");
+
+    let listed = repo
+        .list_commands(&association, "device-cancel-001")
+        .expect("list commands");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].status, "cancelled");
+
+    let missing = repo
+        .cancel_command(&association, "device-cancel-001", "cmd-missing")
+        .expect("cancel missing");
+    assert!(missing.is_none());
+}
+
+#[test]
+fn in_memory_device_session_repository_supports_disconnect_lifecycle() {
+    let repo = InMemoryAiotDeviceSessionRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+    let device_id = "device-session-001";
+    let session_id = "session-device-session-001-primary";
+
+    assert!(!repo
+        .is_session_disconnected(&association, device_id, session_id)
+        .expect("query initial session state"));
+
+    assert!(repo
+        .disconnect_session(&association, device_id, session_id)
+        .expect("disconnect session first time"));
+    assert!(repo
+        .is_session_disconnected(&association, device_id, session_id)
+        .expect("query disconnected session state"));
+    assert!(!repo
+        .disconnect_session(&association, device_id, session_id)
+        .expect("disconnect session second time"));
+}
+
+#[test]
+fn in_memory_event_repository_supports_record_and_scoped_list() {
+    let repo = InMemoryAiotEventRepository::new();
+    let assoc = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    repo.record_event(
+        AiotDeviceEventCreateCommand::new(
+            assoc.clone(),
+            "device-001",
+            "iot.device.media_frame.ingested",
+        )
+        .with_event_version("1")
+        .with_protocol("xiaozhi.websocket", "xiaozhi")
+        .with_message_routing("mediaFrame", "audio", "websocket", "device_to_cloud")
+        .with_message_id("msg-001")
+        .with_correlation_id("corr-001")
+        .with_trace_id("trace-001")
+        .with_payload_hash(
+            "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb7625e5c7c5f5a4c5d6",
+        )
+        .with_media(
+            Some("media-res-001".to_string()),
+            Some("obj-blob-001".to_string()),
+            Some(
+                r#"{"id":"media-res-001","kind":"audio","source":"object_storage","objectBlobId":"obj-blob-001","mimeType":"audio/opus","sizeBytes":"4096"}"#
+                    .to_string(),
+            ),
+        )
+        .with_payload_json(r#"{"codec":"opus","sampleRate":16000}"#)
+        .with_occurred_at("2026-06-01T00:00:00Z"),
+    )
+    .expect("record event");
+
+    repo.record_event(AiotDeviceEventCreateCommand::new(
+        assoc.clone(),
+        "device-002",
+        "iot.device.media_frame.ingested",
+    ))
+    .expect("record other device event");
+
+    let all = repo.list_events(&assoc, None).expect("list all events");
+    let scoped = repo
+        .list_events(&assoc, Some("device-001"))
+        .expect("list device events");
+    assert_eq!(all.len(), 2);
+    assert_eq!(scoped.len(), 1);
+    assert_eq!(scoped[0].device_id, "device-001");
+    assert_eq!(scoped[0].protocol_id, "xiaozhi.websocket");
+}
+
+#[test]
+fn in_memory_twin_repository_supports_upsert_and_snapshot_read() {
+    let repo = InMemoryAiotDeviceTwinRepository::new();
+    let assoc = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    let empty = repo
+        .get_twin_snapshot(&assoc, "device-001")
+        .expect("empty snapshot");
+    assert!(empty.desired.is_empty());
+    assert!(empty.reported.is_empty());
+
+    repo.upsert_twin_property(
+        AiotTwinPropertyUpsertCommand::new(assoc.clone(), "device-001", "volume")
+            .with_desired_value_json("80")
+            .with_reported_value_json("72")
+            .with_desired_updated_at("2026-06-01T00:00:01Z")
+            .with_reported_updated_at("2026-06-01T00:00:02Z"),
+    )
+    .expect("upsert twin property");
+
+    let snapshot = repo
+        .get_twin_snapshot(&assoc, "device-001")
+        .expect("snapshot");
+    assert_eq!(
+        snapshot.desired.get("volume").map(String::as_str),
+        Some("80")
+    );
+    assert_eq!(
+        snapshot.reported.get("volume").map(String::as_str),
+        Some("72")
+    );
+    assert!(snapshot.desired_version >= 1);
+    assert!(snapshot.reported_version >= 1);
 }
 
 #[test]
@@ -92,6 +413,7 @@ fn protocol_runtime_tables_have_payload_and_retry_indexes() {
     assert!(dead_letter.required_columns.contains(&"protocol_id"));
     assert!(dead_letter.required_columns.contains(&"adapter_id"));
     assert!(dead_letter.required_columns.contains(&"payload_ref"));
+    assert!(dead_letter.required_columns.contains(&"payload_hash"));
     assert!(dead_letter
         .required_indexes
         .contains(&"idx_iot_protocol_dead_letter_tenant_created"));
@@ -100,9 +422,28 @@ fn protocol_runtime_tables_have_payload_and_retry_indexes() {
     assert_eq!(outbox.write_owner, "sdkwork-aiot-core");
     assert!(outbox.required_columns.contains(&"next_attempt_at"));
     assert!(outbox.required_columns.contains(&"attempt_count"));
+    assert!(outbox.required_columns.contains(&"event_version"));
+    assert!(outbox.required_columns.contains(&"payload_hash"));
     assert!(outbox
         .required_indexes
         .contains(&"idx_iot_outbox_event_status_next_attempt"));
+
+    let media = table_contract("iot_media_resource").expect("media resource contract");
+    assert_eq!(media.profile, TableProfile::TenantOwnerEntity);
+    assert!(media.required_columns.contains(&"media_resource_id"));
+    assert!(media.required_columns.contains(&"resource_snapshot"));
+    assert!(media
+        .required_indexes
+        .contains(&"uk_iot_media_resource_tenant_resource_id"));
+
+    let firmware = table_contract("iot_firmware_artifact").expect("firmware artifact contract");
+    assert!(firmware.required_columns.contains(&"media_resource_id"));
+    assert!(firmware
+        .required_columns
+        .contains(&"media_resource_snapshot"));
+    assert!(firmware
+        .required_indexes
+        .contains(&"uk_iot_firmware_artifact_tenant_media_resource"));
 }
 
 #[test]
@@ -139,6 +480,9 @@ fn protocol_ingest_storage_command_declares_atomic_write_plan() {
     assert_eq!(outbox.aggregate_type, "device_session");
     assert_eq!(outbox.aggregate_id, "session-001");
     assert_eq!(outbox.topic, "iot.protocol.ingested");
+    assert_eq!(outbox.event_version, "1");
+    assert_eq!(outbox.payload_json, "{}");
+    assert!(outbox.payload_hash.is_none());
     assert_eq!(outbox.initial_status, "pending");
 }
 
@@ -440,6 +784,11 @@ fn in_memory_protocol_uow_records_primary_write_and_outbox_atomically() {
     .with_message_id("msg-001")
     .with_correlation_id("corr-001")
     .with_trace_id("trace-001")
+    .with_media_reference(
+        "media-res-001",
+        Some("obj-blob-001".to_string()),
+        Some(r#"{"id":"media-res-001","kind":"audio","source":"object_storage"}"#.to_string()),
+    )
     .with_idempotency_key("idem-001")
     .with_outbox(AiotOutboxWriteIntent::new(
         "iot.device.session.started",
@@ -466,9 +815,24 @@ fn in_memory_protocol_uow_records_primary_write_and_outbox_atomically() {
         Some("msg-001")
     );
     assert_eq!(
+        snapshot.primary_writes[0].media_resource_id.as_deref(),
+        Some("media-res-001")
+    );
+    assert_eq!(
+        snapshot.primary_writes[0].object_blob_id.as_deref(),
+        Some("obj-blob-001")
+    );
+    assert!(snapshot.primary_writes[0]
+        .media_resource_snapshot
+        .as_deref()
+        .unwrap_or_default()
+        .contains(r#""kind":"audio""#));
+    assert_eq!(
         snapshot.outbox_events[0].event_type,
         "iot.device.session.started"
     );
+    assert_eq!(snapshot.outbox_events[0].event_version, "1");
+    assert_eq!(snapshot.outbox_events[0].payload_json, "{}");
     assert_eq!(snapshot.outbox_events[0].aggregate_id, "session-001");
 }
 

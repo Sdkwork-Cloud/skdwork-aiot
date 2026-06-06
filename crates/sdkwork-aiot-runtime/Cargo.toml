@@ -10,3 +10,4 @@ sdkwork-aiot-core = { path = "../sdkwork-aiot-core" }
 sdkwork-aiot-protocol = { path = "../sdkwork-aiot-protocol" }
 sdkwork-aiot-security = { path = "../sdkwork-aiot-security" }
 sdkwork-aiot-storage = { path = "../sdkwork-aiot-storage" }
+sha2 = "0.10"

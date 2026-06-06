@@ -8,3 +8,7 @@ license.workspace = true
 sdkwork-aiot-runtime = { path = "../../crates/sdkwork-aiot-runtime" }
 sdkwork-aiot-adapter-xiaozhi = { path = "../../crates/sdkwork-aiot-adapter-xiaozhi" }
 sdkwork-aiot-transport = { path = "../../crates/sdkwork-aiot-transport" }
+rumqttc = "0.24"
+ctrlc = "=3.4.5"
+rusqlite = { version = "0.31", features = ["bundled"] }
+redis = "0.28"

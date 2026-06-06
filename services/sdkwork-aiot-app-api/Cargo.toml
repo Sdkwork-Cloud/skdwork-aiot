@@ -7,3 +7,5 @@ license.workspace = true
 [dependencies]
 sdkwork-aiot-http-api = { path = "../../crates/sdkwork-aiot-http-api" }
 sdkwork-aiot-runtime = { path = "../../crates/sdkwork-aiot-runtime" }
+sdkwork-aiot-storage = { path = "../../crates/sdkwork-aiot-storage" }
+sdkwork-aiot-storage-sqlx = { path = "../../crates/sdkwork-aiot-storage-sqlx" }

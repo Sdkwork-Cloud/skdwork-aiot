@@ -7,6 +7,8 @@ license.workspace = true
 [dependencies]
 sdkwork-aiot-protocol = { path = "../sdkwork-aiot-protocol" }
 sdkwork-aiot-security = { path = "../sdkwork-aiot-security" }
+aes = "0.8"
+ctr = "0.9"
 
 [dev-dependencies]
 sdkwork-aiot-runtime = { path = "../sdkwork-aiot-runtime" }

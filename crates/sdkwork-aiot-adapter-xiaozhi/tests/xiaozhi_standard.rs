@@ -1,10 +1,10 @@
 use sdkwork_aiot_adapter_xiaozhi::{
     map_xiaozhi_message_class, xiaozhi_activation_pending_response, xiaozhi_handshake_context,
     xiaozhi_manifest, xiaozhi_ota_response, xiaozhi_routes, xiaozhi_server_hello_response,
-    XiaozhiAudioParams, XiaozhiOtaMetadata, XiaozhiServerHello, XiaozhiWebSocketCodec,
-    AUTHORIZATION_HEADER, CLIENT_ID_HEADER, DEVICE_ID_HEADER, PROTOCOL_VERSION_HEADER,
-    XIAOZHI_ACTIVATE_PATH, XIAOZHI_BASE_PATH, XIAOZHI_OTA_PATH, XIAOZHI_WEBSOCKET_PROTOCOL_ID,
-    XIAOZHI_WS_PATH,
+    XiaozhiAudioParams, XiaozhiMqttCodec, XiaozhiOtaMetadata, XiaozhiServerHello,
+    XiaozhiUdpAudioCodec, XiaozhiWebSocketCodec, AUTHORIZATION_HEADER, CLIENT_ID_HEADER,
+    DEVICE_ID_HEADER, PROTOCOL_VERSION_HEADER, XIAOZHI_ACTIVATE_PATH, XIAOZHI_BASE_PATH,
+    XIAOZHI_MQTT_UDP_PROTOCOL_ID, XIAOZHI_OTA_PATH, XIAOZHI_WEBSOCKET_PROTOCOL_ID, XIAOZHI_WS_PATH,
 };
 use sdkwork_aiot_protocol::{
     CodecKind, InboundFrame, MessageClass, MessageCodec, ProtocolEnvelope, ProtocolPluginScope,
@@ -61,6 +61,8 @@ fn xiaozhi_routes_are_mountable_without_becoming_core_routes() {
     assert!(routes.contains(&XIAOZHI_WS_PATH));
     assert!(routes.contains(&XIAOZHI_OTA_PATH));
     assert!(routes.contains(&XIAOZHI_ACTIVATE_PATH));
+    assert!(routes.contains(&sdkwork_aiot_adapter_xiaozhi::XIAOZHI_MQTT_PATH));
+    assert!(routes.contains(&sdkwork_aiot_adapter_xiaozhi::XIAOZHI_UDP_PATH));
     assert!(routes
         .iter()
         .all(|route| route.starts_with(XIAOZHI_BASE_PATH)));
@@ -178,6 +180,25 @@ fn xiaozhi_server_hello_response_matches_esp32_websocket_expectations() {
     assert_eq!(
         response,
         r#"{"type":"hello","transport":"websocket","session_id":"session-001","audio_params":{"format":"opus","sample_rate":24000,"channels":1,"frame_duration":60}}"#
+    );
+}
+
+#[test]
+fn xiaozhi_server_hello_response_supports_mqtt_udp_profile() {
+    let response = xiaozhi_server_hello_response(
+        XiaozhiServerHello::mqtt_udp(
+            "session-002",
+            "192.168.1.100",
+            8888,
+            "0123456789ABCDEF0123456789ABCDEF",
+            "01000000A1A2A3A40000000000000000",
+        )
+        .with_audio_params(XiaozhiAudioParams::opus(24_000, 1, 60)),
+    );
+
+    assert_eq!(
+        response,
+        r#"{"type":"hello","transport":"udp","session_id":"session-002","audio_params":{"format":"opus","sample_rate":24000,"channels":1,"frame_duration":60},"udp":{"server":"192.168.1.100","port":8888,"key":"0123456789ABCDEF0123456789ABCDEF","nonce":"01000000A1A2A3A40000000000000000"}}"#
     );
 }
 
@@ -393,6 +414,92 @@ fn xiaozhi_mcp_jsonrpc_frame_preserves_method_id_and_correlation() {
 }
 
 #[test]
+fn xiaozhi_mcp_response_error_and_notification_are_classified_for_server_client_flow() {
+    let codec = XiaozhiWebSocketCodec::new().with_handshake_context(xiaozhi_handshake_context([
+        (PROTOCOL_VERSION_HEADER, "3"),
+        (DEVICE_ID_HEADER, "device-001"),
+    ]));
+
+    let response = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"mcp","payload":{"jsonrpc":"2.0","id":2,"result":{"tools":[]}}}"#,
+        ))
+        .expect("mcp response");
+    let error = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"mcp","payload":{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"Unknown tool"}}}"#,
+        ))
+        .expect("mcp error");
+    let notification = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"mcp","payload":{"jsonrpc":"2.0","method":"notifications/state_changed","params":{"newState":"idle"}}}"#,
+        ))
+        .expect("mcp notification");
+
+    assert_eq!(
+        response
+            .extensions
+            .get("xiaozhi.mcp.kind")
+            .map(String::as_str),
+        Some("response")
+    );
+    assert_eq!(response.correlation_id.as_deref(), Some("2"));
+    assert_eq!(
+        error.extensions.get("xiaozhi.mcp.kind").map(String::as_str),
+        Some("error")
+    );
+    assert_eq!(error.correlation_id.as_deref(), Some("3"));
+    assert_eq!(
+        notification
+            .extensions
+            .get("xiaozhi.mcp.kind")
+            .map(String::as_str),
+        Some("notification")
+    );
+    assert_eq!(
+        notification
+            .extensions
+            .get("xiaozhi.mcp.method")
+            .map(String::as_str),
+        Some("notifications/state_changed")
+    );
+}
+
+#[test]
+fn xiaozhi_mcp_string_id_preserves_correlation_and_json_literal() {
+    let codec = XiaozhiWebSocketCodec::new().with_handshake_context(xiaozhi_handshake_context([
+        (PROTOCOL_VERSION_HEADER, "3"),
+        (DEVICE_ID_HEADER, "device-001"),
+    ]));
+
+    let request = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"mcp","payload":{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{"name":"self.light.set_rgb"}}}"#,
+        ))
+        .expect("mcp request");
+
+    assert_eq!(request.correlation_id.as_deref(), Some("call-001"));
+    assert_eq!(
+        request.extensions.get("xiaozhi.mcp.id").map(String::as_str),
+        Some("call-001")
+    );
+    assert_eq!(
+        request
+            .extensions
+            .get("xiaozhi.mcp.id_json")
+            .map(String::as_str),
+        Some(r#""call-001""#)
+    );
+    assert_eq!(
+        request
+            .extensions
+            .get("xiaozhi.mcp.kind")
+            .map(String::as_str),
+        Some("request")
+    );
+}
+
+#[test]
 fn xiaozhi_listen_and_abort_preserve_session_control_semantics() {
     let codec = XiaozhiWebSocketCodec::new().with_handshake_context(xiaozhi_handshake_context([
         (PROTOCOL_VERSION_HEADER, "3"),
@@ -436,6 +543,86 @@ fn xiaozhi_listen_and_abort_preserve_session_control_semantics() {
 }
 
 #[test]
+fn xiaozhi_server_to_device_state_messages_preserve_display_and_system_fields() {
+    let codec = XiaozhiWebSocketCodec::new().with_handshake_context(xiaozhi_handshake_context([
+        (PROTOCOL_VERSION_HEADER, "3"),
+        (DEVICE_ID_HEADER, "device-001"),
+    ]));
+
+    let alert = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"alert","status":"Warning","message":"Battery low","emotion":"sad"}"#,
+        ))
+        .expect("alert envelope");
+    let custom = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"custom","payload":{"message":"anything"}}"#,
+        ))
+        .expect("custom envelope");
+    let goodbye = codec
+        .decode(InboundFrame::text(
+            r#"{"session_id":"session-001","type":"goodbye"}"#,
+        ))
+        .expect("goodbye envelope");
+
+    assert_eq!(alert.message_class, MessageClass::Event);
+    assert_eq!(alert.semantic_type, "alert");
+    assert_eq!(
+        alert
+            .extensions
+            .get("xiaozhi.alert.status")
+            .map(String::as_str),
+        Some("Warning")
+    );
+    assert_eq!(
+        alert
+            .extensions
+            .get("xiaozhi.alert.message")
+            .map(String::as_str),
+        Some("Battery low")
+    );
+    assert_eq!(
+        alert
+            .extensions
+            .get("xiaozhi.alert.emotion")
+            .map(String::as_str),
+        Some("sad")
+    );
+    assert_eq!(custom.message_class, MessageClass::Event);
+    assert_eq!(custom.semantic_type, "custom");
+    assert_eq!(goodbye.message_class, MessageClass::Disconnect);
+}
+
+#[test]
+fn xiaozhi_binary_json_frames_decode_through_json_message_pipeline() {
+    let codec = XiaozhiWebSocketCodec::new().with_handshake_context(xiaozhi_handshake_context([
+        (PROTOCOL_VERSION_HEADER, "3"),
+        (DEVICE_ID_HEADER, "device-001"),
+    ]));
+    let json = br#"{"session_id":"session-001","type":"listen","state":"stop"}"#;
+    let mut frame = Vec::new();
+    frame.push(1);
+    frame.push(0);
+    frame.extend_from_slice(&(json.len() as u16).to_be_bytes());
+    frame.extend_from_slice(json);
+
+    let envelope = codec
+        .decode(InboundFrame::binary(frame))
+        .expect("binary json envelope");
+
+    assert_eq!(envelope.message_class, MessageClass::Event);
+    assert_eq!(envelope.semantic_type, "listen");
+    assert_eq!(envelope.content_type, "application/json");
+    assert_eq!(
+        envelope
+            .extensions
+            .get("xiaozhi.listen.state")
+            .map(String::as_str),
+        Some("stop")
+    );
+}
+
+#[test]
 fn xiaozhi_websocket_codec_rejects_unknown_message_type() {
     let codec = XiaozhiWebSocketCodec::new();
 
@@ -464,6 +651,39 @@ fn xiaozhi_ota_response_matches_firmware_activation_and_connection_shape() {
     ));
     assert!(body.contains(r#""activation":{"message":"Bind this device","challenge":"challenge-001","timeout_ms":30000}"#));
     assert!(body.contains(r#""server_time":{"timestamp":1717171717000,"timezone_offset":480}"#));
+}
+
+#[test]
+fn xiaozhi_ota_response_can_deliver_mqtt_udp_settings_from_external_protocol() {
+    let body = xiaozhi_ota_response(
+        XiaozhiOtaMetadata::new()
+            .with_mqtt(
+                "mqtts://broker.example.com:8883",
+                "client-001",
+                "device-user",
+                "device-pass",
+                "devices/client-001/up",
+                "devices/client-001/down",
+                240,
+            )
+            .with_mqtt_udp(
+                "192.168.1.100",
+                8888,
+                "0123456789ABCDEF0123456789ABCDEF",
+                "01000000A1A2A3A40000000000000000",
+            ),
+    );
+
+    assert!(body.contains(r#""mqtt":{"endpoint":"mqtts://broker.example.com:8883""#));
+    assert!(body.contains(r#""client_id":"client-001""#));
+    assert!(body.contains(r#""username":"device-user""#));
+    assert!(body.contains(r#""password":"device-pass""#));
+    assert!(body.contains(r#""publish_topic":"devices/client-001/up""#));
+    assert!(body.contains(r#""subscribe_topic":"devices/client-001/down""#));
+    assert!(body.contains(r#""keepalive":240"#));
+    assert!(body.contains(
+        r#""udp":{"server":"192.168.1.100","port":8888,"key":"0123456789ABCDEF0123456789ABCDEF","nonce":"01000000A1A2A3A40000000000000000"}"#
+    ));
 }
 
 #[test]
@@ -497,4 +717,68 @@ fn xiaozhi_codec_output_flows_into_runtime_without_runtime_knowing_xiaozhi_paylo
     assert_eq!(result.protocol_id, XIAOZHI_WEBSOCKET_PROTOCOL_ID);
     assert_eq!(result.plugin_id, "xiaozhi");
     assert_eq!(result.device_id.as_deref(), Some("device-001"));
+}
+
+#[test]
+fn xiaozhi_mqtt_codec_decodes_udp_hello_message_into_mqtt_udp_protocol_envelope() {
+    let codec = XiaozhiMqttCodec::new().with_device_and_client("device-001", "client-001");
+
+    let envelope = codec
+        .decode(InboundFrame::text(
+            r#"{"type":"hello","version":3,"transport":"udp","features":{"mcp":true,"aec":true},"audio_params":{"format":"opus","sample_rate":16000,"channels":1,"frame_duration":60}}"#,
+        ))
+        .expect("mqtt hello envelope");
+
+    assert_eq!(envelope.protocol_id, XIAOZHI_MQTT_UDP_PROTOCOL_ID);
+    assert_eq!(envelope.message_class, MessageClass::Handshake);
+    assert_eq!(envelope.semantic_type, "hello");
+    assert_eq!(envelope.protocol_version.as_deref(), Some("3"));
+    assert_eq!(envelope.device_id.as_deref(), Some("device-001"));
+    assert_eq!(envelope.client_id.as_deref(), Some("client-001"));
+    assert_eq!(
+        envelope
+            .extensions
+            .get("xiaozhi.transport")
+            .map(String::as_str),
+        Some("udp")
+    );
+}
+
+#[test]
+fn xiaozhi_udp_audio_codec_roundtrips_encrypted_packet_fields_and_payload() {
+    let codec = XiaozhiUdpAudioCodec::new(
+        "00112233445566778899AABBCCDDEEFF",
+        "01000000A1A2A3A40000000000000000",
+    )
+    .expect("udp audio codec");
+
+    let packet = codec
+        .encode_audio_packet(1234, 7, [0x11, 0x22, 0x33, 0x44])
+        .expect("encoded packet");
+    assert_eq!(packet[0], 0x01);
+
+    let decoded = codec.decode_audio_packet(&packet).expect("decoded packet");
+    assert_eq!(decoded.flags, 0);
+    assert_eq!(decoded.ssrc, 0xA1A2A3A4);
+    assert_eq!(decoded.timestamp, 1234);
+    assert_eq!(decoded.sequence, 7);
+    assert_eq!(decoded.payload, vec![0x11, 0x22, 0x33, 0x44]);
+}
+
+#[test]
+fn xiaozhi_udp_audio_codec_rejects_stale_sequences_when_expected_sequence_is_provided() {
+    let codec = XiaozhiUdpAudioCodec::new(
+        "00112233445566778899AABBCCDDEEFF",
+        "01000000A1A2A3A40000000000000000",
+    )
+    .expect("udp audio codec");
+
+    let packet = codec
+        .encode_audio_packet(1234, 4, [0x11, 0x22, 0x33, 0x44])
+        .expect("encoded packet");
+
+    let error = codec
+        .decode_audio_packet_with_min_sequence(&packet, 5)
+        .expect_err("stale sequence should fail");
+    assert_eq!(error.code, "xiaozhi.udp.sequence.stale");
 }

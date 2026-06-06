@@ -26,6 +26,201 @@ pub const IOT_PERMISSION_PROTOCOL_ADAPTERS_READ: &str = "iot.protocolAdapters.re
 pub const IOT_PERMISSION_PROTOCOL_ADAPTERS_WRITE: &str = "iot.protocolAdapters.write";
 pub const IOT_PERMISSION_RUNTIME_READ: &str = "iot.runtime.read";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiotMediaKind {
+    Image,
+    Video,
+    Audio,
+    Voice,
+    Document,
+    Archive,
+    Model,
+    Other,
+}
+
+impl AiotMediaKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::Video => "video",
+            Self::Audio => "audio",
+            Self::Voice => "voice",
+            Self::Document => "document",
+            Self::Archive => "archive",
+            Self::Model => "model",
+            Self::Other => "other",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiotMediaSource {
+    ObjectStorage,
+    ExternalUrl,
+    DataUrl,
+    ProviderAsset,
+    Generated,
+}
+
+impl AiotMediaSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ObjectStorage => "object_storage",
+            Self::ExternalUrl => "external_url",
+            Self::DataUrl => "data_url",
+            Self::ProviderAsset => "provider_asset",
+            Self::Generated => "generated",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotMediaChecksum {
+    pub algorithm: String,
+    pub value: String,
+}
+
+impl AiotMediaChecksum {
+    pub fn new(algorithm: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            algorithm: algorithm.into(),
+            value: value.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotMediaAccess {
+    pub visibility: String,
+    pub expires_at: Option<String>,
+}
+
+impl AiotMediaAccess {
+    pub fn new(visibility: impl Into<String>) -> Self {
+        Self {
+            visibility: visibility.into(),
+            expires_at: None,
+        }
+    }
+
+    pub fn with_expires_at(mut self, expires_at: impl Into<String>) -> Self {
+        self.expires_at = Some(expires_at.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotMediaAiProvenance {
+    pub provenance: Option<String>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub prompt_id: Option<String>,
+    pub generation_task_id: Option<String>,
+    pub source_media_ids: Vec<String>,
+    pub seed: Option<String>,
+    pub moderation_status: Option<String>,
+    pub safety_labels: Vec<String>,
+}
+
+impl AiotMediaAiProvenance {
+    pub fn generated(provider: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            provenance: Some("generated".to_string()),
+            provider: Some(provider.into()),
+            model: Some(model.into()),
+            prompt_id: None,
+            generation_task_id: None,
+            source_media_ids: Vec::new(),
+            seed: None,
+            moderation_status: None,
+            safety_labels: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotMediaResource {
+    pub id: Option<String>,
+    pub kind: AiotMediaKind,
+    pub source: AiotMediaSource,
+    pub url: Option<String>,
+    pub public_url: Option<String>,
+    pub uri: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub bucket_id: Option<String>,
+    pub object_key: Option<String>,
+    pub object_version: Option<String>,
+    pub file_name: Option<String>,
+    pub mime_type: Option<String>,
+    pub size_bytes: Option<String>,
+    pub checksum: Option<AiotMediaChecksum>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub duration_seconds: Option<String>,
+    pub alt_text: Option<String>,
+    pub title: Option<String>,
+    pub poster: Option<Box<AiotMediaResource>>,
+    pub thumbnails: Vec<AiotMediaResource>,
+    pub variants: Vec<AiotMediaResource>,
+    pub access: Option<AiotMediaAccess>,
+    pub ai: Option<AiotMediaAiProvenance>,
+    pub metadata_json: Option<String>,
+}
+
+impl AiotMediaResource {
+    pub fn new(kind: AiotMediaKind, source: AiotMediaSource) -> Self {
+        Self {
+            id: None,
+            kind,
+            source,
+            url: None,
+            public_url: None,
+            uri: None,
+            object_blob_id: None,
+            bucket_id: None,
+            object_key: None,
+            object_version: None,
+            file_name: None,
+            mime_type: None,
+            size_bytes: None,
+            checksum: None,
+            width: None,
+            height: None,
+            duration_seconds: None,
+            alt_text: None,
+            title: None,
+            poster: None,
+            thumbnails: Vec::new(),
+            variants: Vec::new(),
+            access: None,
+            ai: None,
+            metadata_json: None,
+        }
+    }
+
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn with_object_storage_identity(
+        mut self,
+        object_blob_id: impl Into<String>,
+        bucket_id: impl Into<String>,
+        object_key: impl Into<String>,
+    ) -> Self {
+        self.object_blob_id = Some(object_blob_id.into());
+        self.bucket_id = Some(bucket_id.into());
+        self.object_key = Some(object_key.into());
+        self
+    }
+
+    pub fn with_delivery_url(mut self, url: impl Into<String>) -> Self {
+        self.url = Some(url.into());
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AiotActorRef {
     pub actor_type: String,
@@ -264,6 +459,8 @@ pub fn standard_api_surfaces() -> Vec<AiotApiSurface> {
                 "hardwareProfiles.list",
                 "protocolProfiles.list",
                 "capabilityModels.retrieve",
+                "devices.sessions.disconnect",
+                "devices.commands.cancel",
                 "devices.credentials.create",
                 "firmwareRollouts.create",
                 "protocolAdapters.list",

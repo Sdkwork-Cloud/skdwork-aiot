@@ -1,10 +1,33 @@
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
+
 use sdkwork_aiot_contract::{
-    AiotRequestContext, IOT_PERMISSION_COMMANDS_EXECUTE, IOT_PERMISSION_DEVICES_READ,
-    IOT_PERMISSION_PRODUCTS_READ, IOT_PERMISSION_PROFILES_READ,
-    IOT_PERMISSION_PROTOCOL_ADAPTERS_READ, IOT_PERMISSION_RUNTIME_READ, IOT_PERMISSION_TWINS_READ,
+    AiotRequestContext, IOT_PERMISSION_COMMANDS_CANCEL, IOT_PERMISSION_COMMANDS_EXECUTE,
+    IOT_PERMISSION_COMMANDS_READ, IOT_PERMISSION_DEVICES_DELETE, IOT_PERMISSION_DEVICES_READ,
+    IOT_PERMISSION_DEVICES_WRITE, IOT_PERMISSION_FIRMWARE_READ, IOT_PERMISSION_FIRMWARE_ROLLOUT,
+    IOT_PERMISSION_FIRMWARE_WRITE, IOT_PERMISSION_PRODUCTS_READ, IOT_PERMISSION_PRODUCTS_WRITE,
+    IOT_PERMISSION_PROFILES_READ, IOT_PERMISSION_PROFILES_WRITE,
+    IOT_PERMISSION_PROTOCOL_ADAPTERS_READ, IOT_PERMISSION_RUNTIME_READ,
+    IOT_PERMISSION_SESSIONS_DISCONNECT, IOT_PERMISSION_SESSIONS_READ,
+    IOT_PERMISSION_TELEMETRY_READ, IOT_PERMISSION_TWINS_READ, IOT_PERMISSION_TWINS_WRITE,
 };
+use sdkwork_aiot_core::{
+    CapabilityDefinition, CapabilityKind, HardwareClass, HardwareProfile, Product, ProtocolProfile,
+};
+use sdkwork_aiot_protocol::{standard_protocol_catalog, CapabilityBridge, ProtocolPluginScope};
 use sdkwork_aiot_runtime::{standard_aiot_runtime, AiotRuntime, RuntimeBuildError, RuntimeMode};
+use sdkwork_aiot_storage::{
+    AiotCommandCreateCommand, AiotCommandRecord, AiotCommandRepository, AiotCommandRepositoryError,
+    AiotDeviceCreateCommand, AiotDeviceEventRecord, AiotDeviceRecord, AiotDeviceRepository,
+    AiotDeviceRepositoryError, AiotDeviceSessionRepository, AiotDeviceTwinRepository,
+    AiotDeviceTwinRepositoryError, AiotDeviceTwinSnapshot, AiotDeviceUpdateCommand,
+    AiotEventRepository, AiotEventRepositoryError, AiotStorageAssociation,
+    AiotTwinPropertyUpsertCommand, InMemoryAiotCommandRepository, InMemoryAiotDeviceRepository,
+    InMemoryAiotDeviceSessionRepository, InMemoryAiotDeviceTwinRepository,
+    InMemoryAiotEventRepository,
+};
 use sdkwork_aiot_transport::{build_health_response, HttpRequest, HttpResponse, HttpStatus};
+use serde_json::{Map as JsonMap, Value as JsonValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AiotApiSurface {
@@ -67,10 +90,66 @@ pub fn standard_api_route_contracts() -> Vec<AiotApiRouteContract> {
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
+            method: "POST",
+            path: "/backend/v3/api/iot/products",
+            operation_id: "products.create",
+            required_permission: IOT_PERMISSION_PRODUCTS_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/products/{productId}",
+            operation_id: "products.retrieve",
+            required_permission: IOT_PERMISSION_PRODUCTS_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/products/{productId}",
+            operation_id: "products.update",
+            required_permission: IOT_PERMISSION_PRODUCTS_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/products/{productId}",
+            operation_id: "products.delete",
+            required_permission: IOT_PERMISSION_PRODUCTS_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
             method: "GET",
             path: "/backend/v3/api/iot/hardware_profiles",
             operation_id: "hardwareProfiles.list",
             required_permission: IOT_PERMISSION_PROFILES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "POST",
+            path: "/backend/v3/api/iot/hardware_profiles",
+            operation_id: "hardwareProfiles.create",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/hardware_profiles/{hardwareProfileId}",
+            operation_id: "hardwareProfiles.retrieve",
+            required_permission: IOT_PERMISSION_PROFILES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/hardware_profiles/{hardwareProfileId}",
+            operation_id: "hardwareProfiles.update",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/hardware_profiles/{hardwareProfileId}",
+            operation_id: "hardwareProfiles.delete",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
@@ -81,10 +160,66 @@ pub fn standard_api_route_contracts() -> Vec<AiotApiRouteContract> {
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
+            method: "POST",
+            path: "/backend/v3/api/iot/protocol_profiles",
+            operation_id: "protocolProfiles.create",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/protocol_profiles/{protocolProfileId}",
+            operation_id: "protocolProfiles.retrieve",
+            required_permission: IOT_PERMISSION_PROFILES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/protocol_profiles/{protocolProfileId}",
+            operation_id: "protocolProfiles.update",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/protocol_profiles/{protocolProfileId}",
+            operation_id: "protocolProfiles.delete",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/capability_models",
+            operation_id: "capabilityModels.list",
+            required_permission: IOT_PERMISSION_PROFILES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "POST",
+            path: "/backend/v3/api/iot/capability_models",
+            operation_id: "capabilityModels.create",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
             method: "GET",
             path: "/backend/v3/api/iot/capability_models/{capabilityModelId}",
             operation_id: "capabilityModels.retrieve",
             required_permission: IOT_PERMISSION_PROFILES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/capability_models/{capabilityModelId}",
+            operation_id: "capabilityModels.update",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/capability_models/{capabilityModelId}",
+            operation_id: "capabilityModels.delete",
+            required_permission: IOT_PERMISSION_PROFILES_WRITE,
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
@@ -96,23 +231,184 @@ pub fn standard_api_route_contracts() -> Vec<AiotApiRouteContract> {
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
             method: "POST",
+            path: "/backend/v3/api/iot/devices",
+            operation_id: "devices.create",
+            required_permission: IOT_PERMISSION_DEVICES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}",
+            operation_id: "devices.retrieve",
+            required_permission: IOT_PERMISSION_DEVICES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/devices/{deviceId}",
+            operation_id: "devices.update",
+            required_permission: IOT_PERMISSION_DEVICES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/devices/{deviceId}",
+            operation_id: "devices.delete",
+            required_permission: IOT_PERMISSION_DEVICES_DELETE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}/credentials",
+            operation_id: "devices.credentials.list",
+            required_permission: IOT_PERMISSION_DEVICES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}/credentials/{credentialId}",
+            operation_id: "devices.credentials.retrieve",
+            required_permission: IOT_PERMISSION_DEVICES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "POST",
             path: "/backend/v3/api/iot/devices/{deviceId}/credentials",
             operation_id: "devices.credentials.create",
-            required_permission: sdkwork_aiot_contract::IOT_PERMISSION_DEVICES_WRITE,
+            required_permission: IOT_PERMISSION_DEVICES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/devices/{deviceId}/credentials/{credentialId}",
+            operation_id: "devices.credentials.delete",
+            required_permission: IOT_PERMISSION_DEVICES_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}/sessions",
+            operation_id: "devices.sessions.list",
+            required_permission: IOT_PERMISSION_SESSIONS_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/devices/{deviceId}/sessions/{sessionId}",
+            operation_id: "devices.sessions.disconnect",
+            required_permission: IOT_PERMISSION_SESSIONS_DISCONNECT,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}/capabilities",
+            operation_id: "devices.capabilities.list",
+            required_permission: IOT_PERMISSION_DEVICES_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}/commands",
+            operation_id: "devices.commands.list",
+            required_permission: IOT_PERMISSION_COMMANDS_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "POST",
+            path: "/backend/v3/api/iot/devices/{deviceId}/commands/{commandId}/cancel",
+            operation_id: "devices.commands.cancel",
+            required_permission: IOT_PERMISSION_COMMANDS_CANCEL,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/devices/{deviceId}/twin",
+            operation_id: "devices.twin.retrieve",
+            required_permission: IOT_PERMISSION_TWINS_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PATCH",
+            path: "/backend/v3/api/iot/devices/{deviceId}/twin",
+            operation_id: "devices.twin.update",
+            required_permission: IOT_PERMISSION_TWINS_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/firmware_artifacts",
+            operation_id: "firmwareArtifacts.list",
+            required_permission: IOT_PERMISSION_FIRMWARE_READ,
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
             method: "POST",
             path: "/backend/v3/api/iot/firmware_artifacts",
             operation_id: "firmwareArtifacts.create",
-            required_permission: sdkwork_aiot_contract::IOT_PERMISSION_FIRMWARE_WRITE,
+            required_permission: IOT_PERMISSION_FIRMWARE_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/firmware_artifacts/{artifactId}",
+            operation_id: "firmwareArtifacts.retrieve",
+            required_permission: IOT_PERMISSION_FIRMWARE_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/firmware_artifacts/{artifactId}",
+            operation_id: "firmwareArtifacts.update",
+            required_permission: IOT_PERMISSION_FIRMWARE_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/firmware_artifacts/{artifactId}",
+            operation_id: "firmwareArtifacts.delete",
+            required_permission: IOT_PERMISSION_FIRMWARE_WRITE,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/firmware_rollouts",
+            operation_id: "firmwareRollouts.list",
+            required_permission: IOT_PERMISSION_FIRMWARE_READ,
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
             method: "POST",
             path: "/backend/v3/api/iot/firmware_rollouts",
             operation_id: "firmwareRollouts.create",
-            required_permission: sdkwork_aiot_contract::IOT_PERMISSION_FIRMWARE_ROLLOUT,
+            required_permission: IOT_PERMISSION_FIRMWARE_ROLLOUT,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/firmware_rollouts/{rolloutId}",
+            operation_id: "firmwareRollouts.retrieve",
+            required_permission: IOT_PERMISSION_FIRMWARE_READ,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "PUT",
+            path: "/backend/v3/api/iot/firmware_rollouts/{rolloutId}",
+            operation_id: "firmwareRollouts.update",
+            required_permission: IOT_PERMISSION_FIRMWARE_ROLLOUT,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "DELETE",
+            path: "/backend/v3/api/iot/firmware_rollouts/{rolloutId}",
+            operation_id: "firmwareRollouts.delete",
+            required_permission: IOT_PERMISSION_FIRMWARE_ROLLOUT,
+        },
+        AiotApiRouteContract {
+            surface: AiotApiSurface::Admin,
+            method: "GET",
+            path: "/backend/v3/api/iot/events",
+            operation_id: "events.list",
+            required_permission: IOT_PERMISSION_TELEMETRY_READ,
         },
         AiotApiRouteContract {
             surface: AiotApiSurface::Admin,
@@ -142,15 +438,34 @@ pub fn route_contract_for_request(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct AiotApiServer {
     surface: AiotApiSurface,
     runtime: AiotRuntime,
+    device_repository: Arc<dyn AiotDeviceRepository>,
+    command_repository: Arc<dyn AiotCommandRepository>,
+    event_repository: Arc<dyn AiotEventRepository>,
+    twin_repository: Arc<dyn AiotDeviceTwinRepository>,
+    device_session_repository: Arc<dyn AiotDeviceSessionRepository>,
+    credential_repository: Arc<InMemoryAiotCredentialRepository>,
+    firmware_repository: Arc<InMemoryAiotFirmwareRepository>,
+    catalog_repository: Arc<InMemoryAiotCatalogRepository>,
 }
 
 impl AiotApiServer {
     pub fn new(surface: AiotApiSurface, runtime: AiotRuntime) -> Self {
-        Self { surface, runtime }
+        Self {
+            surface,
+            runtime,
+            device_repository: Arc::new(InMemoryAiotDeviceRepository::new()),
+            command_repository: Arc::new(InMemoryAiotCommandRepository::new()),
+            event_repository: Arc::new(InMemoryAiotEventRepository::new()),
+            twin_repository: Arc::new(InMemoryAiotDeviceTwinRepository::new()),
+            device_session_repository: Arc::new(InMemoryAiotDeviceSessionRepository::new()),
+            credential_repository: Arc::new(InMemoryAiotCredentialRepository::new()),
+            firmware_repository: Arc::new(InMemoryAiotFirmwareRepository::new()),
+            catalog_repository: Arc::new(InMemoryAiotCatalogRepository::new()),
+        }
     }
 
     pub fn surface(&self) -> AiotApiSurface {
@@ -159,6 +474,782 @@ impl AiotApiServer {
 
     pub fn runtime(&self) -> &AiotRuntime {
         &self.runtime
+    }
+
+    pub fn with_device_repository(
+        mut self,
+        device_repository: Arc<dyn AiotDeviceRepository>,
+    ) -> Self {
+        self.device_repository = device_repository;
+        self
+    }
+
+    pub fn with_command_repository(
+        mut self,
+        command_repository: Arc<dyn AiotCommandRepository>,
+    ) -> Self {
+        self.command_repository = command_repository;
+        self
+    }
+
+    pub fn with_event_repository(mut self, event_repository: Arc<dyn AiotEventRepository>) -> Self {
+        self.event_repository = event_repository;
+        self
+    }
+
+    pub fn with_twin_repository(
+        mut self,
+        twin_repository: Arc<dyn AiotDeviceTwinRepository>,
+    ) -> Self {
+        self.twin_repository = twin_repository;
+        self
+    }
+
+    pub fn with_firmware_repository(
+        mut self,
+        firmware_repository: Arc<InMemoryAiotFirmwareRepository>,
+    ) -> Self {
+        self.firmware_repository = firmware_repository;
+        self
+    }
+
+    pub fn with_credential_repository(
+        mut self,
+        credential_repository: Arc<InMemoryAiotCredentialRepository>,
+    ) -> Self {
+        self.credential_repository = credential_repository;
+        self
+    }
+
+    pub fn with_device_session_repository(
+        mut self,
+        device_session_repository: Arc<dyn AiotDeviceSessionRepository>,
+    ) -> Self {
+        self.device_session_repository = device_session_repository;
+        self
+    }
+
+    pub fn with_catalog_repository(
+        mut self,
+        catalog_repository: Arc<InMemoryAiotCatalogRepository>,
+    ) -> Self {
+        self.catalog_repository = catalog_repository;
+        self
+    }
+
+    fn create_product(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotProductCreatePayload,
+    ) -> Result<AiotProductRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .create_product(association, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn list_products(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotProductRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut records = standard_product_records();
+        records.extend(self.catalog_repository.list_products(&association));
+        Ok(records)
+    }
+
+    fn get_product(
+        &self,
+        context: &AiotRequestContext,
+        product_id: &str,
+    ) -> Result<AiotProductRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .get_product(&association, product_id)
+            .ok_or_else(|| product_not_found_response(product_id))
+    }
+
+    fn update_product(
+        &self,
+        context: &AiotRequestContext,
+        product_id: &str,
+        payload: AiotProductUpdatePayload,
+    ) -> Result<AiotProductRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .update_product(association, product_id, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn delete_product(&self, context: &AiotRequestContext, product_id: &str) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .delete_product(&association, product_id)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn create_hardware_profile(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotHardwareProfileCreatePayload,
+    ) -> Result<AiotHardwareProfileRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .create_hardware_profile(association, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn list_hardware_profiles(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotHardwareProfileRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut records = standard_hardware_profile_records();
+        records.extend(self.catalog_repository.list_hardware_profiles(&association));
+        Ok(records)
+    }
+
+    fn get_hardware_profile(
+        &self,
+        context: &AiotRequestContext,
+        hardware_profile_id: &str,
+    ) -> Result<AiotHardwareProfileRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .get_hardware_profile(&association, hardware_profile_id)
+            .ok_or_else(|| hardware_profile_not_found_response(hardware_profile_id))
+    }
+
+    fn update_hardware_profile(
+        &self,
+        context: &AiotRequestContext,
+        hardware_profile_id: &str,
+        payload: AiotHardwareProfileUpdatePayload,
+    ) -> Result<AiotHardwareProfileRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .update_hardware_profile(association, hardware_profile_id, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn delete_hardware_profile(
+        &self,
+        context: &AiotRequestContext,
+        hardware_profile_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .delete_hardware_profile(&association, hardware_profile_id)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn create_protocol_profile(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotProtocolProfileCreatePayload,
+    ) -> Result<AiotProtocolProfileRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .create_protocol_profile(association, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn list_protocol_profiles(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotProtocolProfileRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut records = standard_protocol_profile_records();
+        records.extend(self.catalog_repository.list_protocol_profiles(&association));
+        Ok(records)
+    }
+
+    fn get_protocol_profile(
+        &self,
+        context: &AiotRequestContext,
+        protocol_profile_id: &str,
+    ) -> Result<AiotProtocolProfileRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .get_protocol_profile(&association, protocol_profile_id)
+            .ok_or_else(|| protocol_profile_not_found_response(protocol_profile_id))
+    }
+
+    fn update_protocol_profile(
+        &self,
+        context: &AiotRequestContext,
+        protocol_profile_id: &str,
+        payload: AiotProtocolProfileUpdatePayload,
+    ) -> Result<AiotProtocolProfileRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .update_protocol_profile(association, protocol_profile_id, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn delete_protocol_profile(
+        &self,
+        context: &AiotRequestContext,
+        protocol_profile_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .delete_protocol_profile(&association, protocol_profile_id)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn create_capability_model(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotCapabilityModelCreatePayload,
+    ) -> Result<AiotCapabilityModelRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .create_capability_model(association, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn get_capability_model(
+        &self,
+        context: &AiotRequestContext,
+        capability_model_id: &str,
+    ) -> Result<AiotCapabilityModelRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .get_capability_model(&association, capability_model_id)
+            .or_else(|| self.catalog_repository.get_seed_capability_model(capability_model_id))
+            .ok_or_else(|| capability_model_not_found_response(capability_model_id))
+    }
+
+    fn list_capability_models(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotCapabilityModelRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut records = standard_capability_model_records();
+        records.extend(self.catalog_repository.list_capability_models(&association));
+        Ok(records)
+    }
+
+    fn update_capability_model(
+        &self,
+        context: &AiotRequestContext,
+        capability_model_id: &str,
+        payload: AiotCapabilityModelUpdatePayload,
+    ) -> Result<AiotCapabilityModelRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .update_capability_model(association, capability_model_id, payload)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn delete_capability_model(
+        &self,
+        context: &AiotRequestContext,
+        capability_model_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.catalog_repository
+            .delete_capability_model(&association, capability_model_id)
+            .map_err(catalog_repository_error_to_response)
+    }
+
+    fn create_device(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotDeviceCreatePayload,
+    ) -> Result<AiotDeviceRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut command = AiotDeviceCreateCommand::new(
+            association,
+            payload.device_id,
+            payload.display_name,
+            payload.product_id,
+        );
+        if let Some(client_id) = payload.client_id {
+            command = command.with_client_id(client_id);
+        }
+        if let Some(chip_family) = payload.chip_family {
+            command = command.with_chip_family(chip_family);
+        }
+
+        self.device_repository
+            .create_device(command)
+            .map_err(device_repository_error_to_response)
+    }
+
+    fn list_devices(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotDeviceRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        Ok(self.device_repository.list_devices(&association))
+    }
+
+    fn get_device(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Option<AiotDeviceRecord> {
+        request_context_to_storage_association(context)
+            .ok()
+            .and_then(|association| self.device_repository.get_device(&association, device_id))
+    }
+
+    fn update_device(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        payload: AiotDeviceUpdatePayload,
+    ) -> Result<AiotDeviceRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut command = AiotDeviceUpdateCommand::new(association, device_id.to_string());
+        if let Some(display_name) = payload.display_name {
+            command = command.with_display_name(display_name);
+        }
+        if let Some(status) = payload.status {
+            command = command.with_status(status);
+        }
+        if let Some(metadata_json) = payload.metadata_json {
+            command = command.with_metadata_json(metadata_json);
+        }
+        self.device_repository
+            .update_device(command)
+            .map_err(device_repository_error_to_response)
+    }
+
+    fn delete_device(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.device_repository
+            .delete_device(&association, device_id)
+            .map_err(device_repository_error_to_response)
+    }
+
+    fn create_command(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        payload: AiotCommandCreatePayload,
+    ) -> Result<AiotCommandRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let mut command = AiotCommandCreateCommand::new(
+            association,
+            device_id.to_string(),
+            payload.capability_name,
+            payload.command_name,
+        )
+        .with_request_payload_json(payload.payload_json)
+        .with_request_media(
+            payload.request_media_resource_id,
+            payload.request_object_blob_id,
+            payload.request_media_json,
+        );
+        if let Some(trace_id) = payload.trace_id {
+            command = command.with_trace_id(trace_id);
+        }
+        if let Some(idempotency_key) = payload.idempotency_key {
+            command = command.with_idempotency_key(idempotency_key);
+        }
+        if let Some(timeout_at) = payload.timeout_at {
+            command = command.with_timeout_at(timeout_at);
+        }
+        if let Some(session_id) = payload.session_id {
+            command = command.with_session_id(session_id);
+        }
+
+        self.command_repository
+            .create_command(command)
+            .map_err(command_repository_error_to_response)
+    }
+
+    fn list_commands(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Result<Vec<AiotCommandRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.command_repository
+            .list_commands(&association, device_id)
+            .map_err(command_repository_error_to_response)
+    }
+
+    fn list_device_sessions(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Result<Vec<AiotDeviceSessionRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let device = self
+            .device_repository
+            .get_device(&association, device_id)
+            .ok_or_else(|| device_not_found_response(device_id))?;
+
+        let status = device.status.to_ascii_lowercase();
+        if matches!(status.as_str(), "online" | "active" | "connected") {
+            let session_id = format!("session-{}-primary", device.device_id);
+            if !self
+                .device_session_repository
+                .is_session_disconnected(&association, device_id, &session_id)
+                .map_err(device_repository_error_to_response)?
+            {
+                return Ok(vec![AiotDeviceSessionRecord {
+                    session_id,
+                    device_id: device.device_id,
+                    status: "connected".to_string(),
+                    connected_at: Some(device.last_seen_at),
+                    disconnected_at: None,
+                    transport: "websocket".to_string(),
+                }]);
+            }
+        }
+
+        Ok(Vec::new())
+    }
+
+    fn disconnect_device_session(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        session_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let device = self
+            .device_repository
+            .get_device(&association, device_id)
+            .ok_or_else(|| device_not_found_response(device_id))?;
+        let expected_session_id = format!("session-{}-primary", device.device_id);
+        if session_id != expected_session_id {
+            return Err(device_session_not_found_response(session_id));
+        }
+        if self
+            .device_session_repository
+            .is_session_disconnected(&association, device_id, session_id)
+            .map_err(device_repository_error_to_response)?
+        {
+            return Err(device_session_not_found_response(session_id));
+        }
+        self.device_session_repository
+            .disconnect_session(&association, device_id, session_id)
+            .map_err(device_repository_error_to_response)?;
+        Ok(())
+    }
+
+    fn list_device_capabilities(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Result<Vec<AiotDeviceCapabilityRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        let device = self
+            .device_repository
+            .get_device(&association, device_id)
+            .ok_or_else(|| device_not_found_response(device_id))?;
+
+        let mut capabilities = vec![
+            AiotDeviceCapabilityRecord {
+                capability_name: "audio.capture".to_string(),
+                capability_kind: "sensor".to_string(),
+                status: "enabled".to_string(),
+            },
+            AiotDeviceCapabilityRecord {
+                capability_name: "audio.playback".to_string(),
+                capability_kind: "actuator".to_string(),
+                status: "enabled".to_string(),
+            },
+            AiotDeviceCapabilityRecord {
+                capability_name: "system.reboot".to_string(),
+                capability_kind: "control".to_string(),
+                status: "enabled".to_string(),
+            },
+        ];
+
+        if device
+            .chip_family
+            .as_deref()
+            .unwrap_or_default()
+            .contains("s3")
+        {
+            capabilities.push(AiotDeviceCapabilityRecord {
+                capability_name: "display.render".to_string(),
+                capability_kind: "actuator".to_string(),
+                status: "enabled".to_string(),
+            });
+        }
+
+        Ok(capabilities)
+    }
+
+    fn list_events(
+        &self,
+        context: &AiotRequestContext,
+        device_id: Option<&str>,
+    ) -> Result<Vec<AiotDeviceEventRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.event_repository
+            .list_events(&association, device_id)
+            .map_err(event_repository_error_to_response)
+    }
+
+    fn get_twin_snapshot(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Result<AiotDeviceTwinSnapshot, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.twin_repository
+            .get_twin_snapshot(&association, device_id)
+            .map_err(twin_repository_error_to_response)
+    }
+
+    fn update_twin(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        payload: AiotTwinUpdatePayload,
+    ) -> Result<AiotDeviceTwinSnapshot, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        if self
+            .device_repository
+            .get_device(&association, device_id)
+            .is_none()
+        {
+            return Err(device_not_found_response(device_id));
+        }
+
+        let mut latest = self
+            .twin_repository
+            .get_twin_snapshot(&association, device_id)
+            .map_err(twin_repository_error_to_response)?;
+        for (key, value_json) in payload.desired {
+            latest = self
+                .twin_repository
+                .upsert_twin_property(
+                    AiotTwinPropertyUpsertCommand::new(association.clone(), device_id, key)
+                        .with_desired_value_json(value_json),
+                )
+                .map_err(twin_repository_error_to_response)?;
+        }
+        for (key, value_json) in payload.reported {
+            latest = self
+                .twin_repository
+                .upsert_twin_property(
+                    AiotTwinPropertyUpsertCommand::new(association.clone(), device_id, key)
+                        .with_reported_value_json(value_json),
+                )
+                .map_err(twin_repository_error_to_response)?;
+        }
+        Ok(latest)
+    }
+
+    fn list_device_credentials(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+    ) -> Result<Vec<AiotDeviceCredentialRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        if self
+            .device_repository
+            .get_device(&association, device_id)
+            .is_none()
+        {
+            return Err(device_not_found_response(device_id));
+        }
+        Ok(self
+            .credential_repository
+            .list_credentials(&association, device_id))
+    }
+
+    fn create_device_credential(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        payload: AiotCredentialCreatePayload,
+    ) -> Result<AiotDeviceCredentialRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        if self
+            .device_repository
+            .get_device(&association, device_id)
+            .is_none()
+        {
+            return Err(device_not_found_response(device_id));
+        }
+
+        self.credential_repository.create_credential(
+            association,
+            AiotCredentialCreateCommand {
+                device_id: device_id.to_string(),
+                credential_type: payload.credential_type,
+                expires_at: payload.expires_at,
+            },
+        )
+    }
+
+    fn get_device_credential(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        credential_id: &str,
+    ) -> Result<AiotDeviceCredentialRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        if self
+            .device_repository
+            .get_device(&association, device_id)
+            .is_none()
+        {
+            return Err(device_not_found_response(device_id));
+        }
+        self.credential_repository
+            .get_credential(&association, device_id, credential_id)
+            .ok_or_else(|| credential_not_found_response(credential_id))
+    }
+
+    fn delete_device_credential(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        credential_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        if self
+            .device_repository
+            .get_device(&association, device_id)
+            .is_none()
+        {
+            return Err(device_not_found_response(device_id));
+        }
+
+        self.credential_repository
+            .delete_credential(&association, device_id, credential_id)
+    }
+
+    fn cancel_command(
+        &self,
+        context: &AiotRequestContext,
+        device_id: &str,
+        command_id: &str,
+    ) -> Result<AiotCommandRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        if self
+            .device_repository
+            .get_device(&association, device_id)
+            .is_none()
+        {
+            return Err(device_not_found_response(device_id));
+        }
+        self.command_repository
+            .cancel_command(&association, device_id, command_id)
+            .map_err(command_repository_error_to_response)?
+            .ok_or_else(|| command_not_found_response(command_id))
+    }
+
+    fn create_firmware_artifact(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotFirmwareArtifactCreatePayload,
+    ) -> Result<AiotFirmwareArtifactRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .create_artifact(association, payload)
+            .map_err(firmware_repository_error_to_response)
+    }
+
+    fn list_firmware_artifacts(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotFirmwareArtifactRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        Ok(self.firmware_repository.list_artifacts(&association))
+    }
+
+    fn get_firmware_artifact(
+        &self,
+        context: &AiotRequestContext,
+        artifact_id: &str,
+    ) -> Result<AiotFirmwareArtifactRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .get_artifact(&association, artifact_id)
+            .ok_or_else(|| firmware_artifact_not_found_response(artifact_id))
+    }
+
+    fn update_firmware_artifact(
+        &self,
+        context: &AiotRequestContext,
+        artifact_id: &str,
+        payload: AiotFirmwareArtifactUpdatePayload,
+    ) -> Result<AiotFirmwareArtifactRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .update_artifact(association, artifact_id, payload)
+            .map_err(firmware_repository_error_to_response)
+    }
+
+    fn delete_firmware_artifact(
+        &self,
+        context: &AiotRequestContext,
+        artifact_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .delete_artifact(&association, artifact_id)
+            .map_err(firmware_repository_error_to_response)
+    }
+
+    fn create_firmware_rollout(
+        &self,
+        context: &AiotRequestContext,
+        payload: AiotFirmwareRolloutCreatePayload,
+    ) -> Result<AiotFirmwareRolloutRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .create_rollout(association, payload)
+            .map_err(firmware_repository_error_to_response)
+    }
+
+    fn list_firmware_rollouts(
+        &self,
+        context: &AiotRequestContext,
+    ) -> Result<Vec<AiotFirmwareRolloutRecord>, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        Ok(self.firmware_repository.list_rollouts(&association))
+    }
+
+    fn get_firmware_rollout(
+        &self,
+        context: &AiotRequestContext,
+        rollout_id: &str,
+    ) -> Result<AiotFirmwareRolloutRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .get_rollout(&association, rollout_id)
+            .ok_or_else(|| firmware_rollout_not_found_response(rollout_id))
+    }
+
+    fn update_firmware_rollout(
+        &self,
+        context: &AiotRequestContext,
+        rollout_id: &str,
+        payload: AiotFirmwareRolloutUpdatePayload,
+    ) -> Result<AiotFirmwareRolloutRecord, HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .update_rollout(association, rollout_id, payload)
+            .map_err(firmware_repository_error_to_response)
+    }
+
+    fn delete_firmware_rollout(
+        &self,
+        context: &AiotRequestContext,
+        rollout_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let association = request_context_to_storage_association(context)?;
+        self.firmware_repository
+            .delete_rollout(&association, rollout_id)
+            .map_err(firmware_repository_error_to_response)
     }
 }
 
@@ -259,28 +1350,754 @@ pub fn handle_resolved_api_request(
         return response;
     }
 
-    match request.path.as_str() {
-        "/healthz" | "/readyz" => build_health_response("sdkwork-aiot-http-api", true),
-        "/backend/v3/api/iot/protocol_adapters" if server.surface == AiotApiSurface::Admin => {
-            HttpResponse::new(HttpStatus::Ok)
-                .with_header("content-type", "application/json")
-                .with_body(protocol_adapters_json(server.runtime()))
+    if matches!(request.path.as_str(), "/healthz" | "/readyz") {
+        return build_health_response("sdkwork-aiot-http-api", true);
+    }
+
+    let Some(route) = route_contract_for_request(server.surface, request) else {
+        return problem_response(
+            HttpStatus::NotFound,
+            "api.route.unsupported",
+            "API route is not mounted on this surface",
+        );
+    };
+
+    let product_id = route_parameter_value(route.path, &request.path, "productId");
+    let hardware_profile_id = route_parameter_value(route.path, &request.path, "hardwareProfileId");
+    let protocol_profile_id = route_parameter_value(route.path, &request.path, "protocolProfileId");
+    let device_id = route_parameter_value(route.path, &request.path, "deviceId");
+    let capability_model_id = route_parameter_value(route.path, &request.path, "capabilityModelId");
+    let artifact_id = route_parameter_value(route.path, &request.path, "artifactId");
+    let rollout_id = route_parameter_value(route.path, &request.path, "rolloutId");
+    let credential_id = route_parameter_value(route.path, &request.path, "credentialId");
+    let session_id = route_parameter_value(route.path, &request.path, "sessionId");
+    let command_id = route_parameter_value(route.path, &request.path, "commandId");
+    let request_context = match resolved.context() {
+        AiotApiRequestContext::Protected(context) => Some(context),
+        AiotApiRequestContext::Public => None,
+    };
+
+    match (server.surface, route.operation_id) {
+        (AiotApiSurface::Admin, "protocolAdapters.list") => HttpResponse::new(HttpStatus::Ok)
+            .with_header("content-type", "application/json")
+            .with_body(protocol_adapters_json(server.runtime())),
+        (AiotApiSurface::Admin, "runtime.capacity.retrieve") => HttpResponse::new(HttpStatus::Ok)
+            .with_header("content-type", "application/json")
+            .with_body(runtime_capacity_json()),
+        (AiotApiSurface::Admin, "products.list") => {
+            standard_product_collection_response(&standard_product_catalog())
         }
-        "/backend/v3/api/iot/runtime/capacity" if server.surface == AiotApiSurface::Admin => {
-            HttpResponse::new(HttpStatus::Ok)
-                .with_header("content-type", "application/json")
-                .with_body(runtime_capacity_json())
+        (AiotApiSurface::Admin, "products.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match product_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_product(context, payload) {
+                Ok(record) => standard_product_response(HttpStatus::Created, &record),
+                Err(problem) => problem,
+            }
         }
-        "/backend/v3/api/iot/products"
-        | "/backend/v3/api/iot/hardware_profiles"
-        | "/backend/v3/api/iot/protocol_profiles"
-        | "/backend/v3/api/iot/devices"
-            if server.surface == AiotApiSurface::Admin =>
-        {
-            standard_empty_collection_response()
+        (AiotApiSurface::Admin, "products.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let product_id = product_id.as_deref().unwrap_or("unknown-product");
+            match server.get_product(context, product_id) {
+                Ok(record) => standard_product_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
         }
-        "/app/v3/api/iot/devices" if server.surface == AiotApiSurface::App => {
-            standard_empty_collection_response()
+        (AiotApiSurface::Admin, "products.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let product_id = product_id.as_deref().unwrap_or("unknown-product");
+            let payload = match product_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_product(context, product_id, payload) {
+                Ok(record) => standard_product_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "products.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let product_id = product_id.as_deref().unwrap_or("unknown-product");
+            match server.delete_product(context, product_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "hardwareProfiles.list") => {
+            standard_hardware_profile_collection_response(&standard_hardware_profile_catalog())
+        }
+        (AiotApiSurface::Admin, "hardwareProfiles.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match hardware_profile_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_hardware_profile(context, payload) {
+                Ok(record) => standard_hardware_profile_response(HttpStatus::Created, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "hardwareProfiles.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let hardware_profile_id = hardware_profile_id
+                .as_deref()
+                .unwrap_or("unknown-hardware-profile");
+            match server.get_hardware_profile(context, hardware_profile_id) {
+                Ok(record) => standard_hardware_profile_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "hardwareProfiles.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let hardware_profile_id = hardware_profile_id
+                .as_deref()
+                .unwrap_or("unknown-hardware-profile");
+            let payload = match hardware_profile_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_hardware_profile(context, hardware_profile_id, payload) {
+                Ok(record) => standard_hardware_profile_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "hardwareProfiles.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let hardware_profile_id = hardware_profile_id
+                .as_deref()
+                .unwrap_or("unknown-hardware-profile");
+            match server.delete_hardware_profile(context, hardware_profile_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "protocolProfiles.list") => {
+            standard_protocol_profile_collection_response(&standard_protocol_profile_catalog())
+        }
+        (AiotApiSurface::Admin, "protocolProfiles.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match protocol_profile_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_protocol_profile(context, payload) {
+                Ok(record) => standard_protocol_profile_response(HttpStatus::Created, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "protocolProfiles.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let protocol_profile_id = protocol_profile_id
+                .as_deref()
+                .unwrap_or("unknown-protocol-profile");
+            match server.get_protocol_profile(context, protocol_profile_id) {
+                Ok(record) => standard_protocol_profile_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "protocolProfiles.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let protocol_profile_id = protocol_profile_id
+                .as_deref()
+                .unwrap_or("unknown-protocol-profile");
+            let payload = match protocol_profile_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_protocol_profile(context, protocol_profile_id, payload) {
+                Ok(record) => standard_protocol_profile_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "protocolProfiles.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let protocol_profile_id = protocol_profile_id
+                .as_deref()
+                .unwrap_or("unknown-protocol-profile");
+            match server.delete_protocol_profile(context, protocol_profile_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "capabilityModels.list") => {
+            standard_capability_model_collection_response(&standard_capability_models())
+        }
+        (AiotApiSurface::Admin, "capabilityModels.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match capability_model_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_capability_model(context, payload) {
+                Ok(record) => standard_capability_model_record_response(HttpStatus::Created, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.list") | (AiotApiSurface::App, "devices.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_devices(context) {
+                Ok(devices) => standard_device_collection_response(&devices),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.sessions.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.list_device_sessions(context, device_id) {
+                Ok(sessions) => standard_device_session_collection_response(&sessions),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.sessions.disconnect") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let session_id = session_id.as_deref().unwrap_or("unknown-session");
+            match server.disconnect_device_session(context, device_id, session_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.capabilities.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.list_device_capabilities(context, device_id) {
+                Ok(capabilities) => standard_device_capability_collection_response(&capabilities),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.commands.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.list_commands(context, device_id) {
+                Ok(commands) => standard_command_collection_response(&commands),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.commands.cancel") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let command_id = command_id.as_deref().unwrap_or("unknown-command");
+            match server.cancel_command(context, device_id, command_id) {
+                Ok(command) => standard_command_response(HttpStatus::Ok, &command),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "events.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_events(context, None) {
+                Ok(events) => standard_event_collection_response(&events),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::App, "devices.events.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.list_events(context, Some(device_id)) {
+                Ok(events) => standard_event_collection_response(&events),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "capabilityModels.retrieve") => {
+            let capability_model_id = capability_model_id
+                .as_deref()
+                .unwrap_or("unknown-capability-model");
+            match server.get_capability_model(capability_model_id) {
+                Ok(record) => standard_capability_model_record_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "capabilityModels.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let capability_model_id = capability_model_id
+                .as_deref()
+                .unwrap_or("unknown-capability-model");
+            let payload = match capability_model_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_capability_model(context, capability_model_id, payload) {
+                Ok(record) => standard_capability_model_record_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "capabilityModels.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let capability_model_id = capability_model_id
+                .as_deref()
+                .unwrap_or("unknown-capability-model");
+            match server.delete_capability_model(context, capability_model_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match device_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_device(context, payload) {
+                Ok(device) => standard_device_response(HttpStatus::Created, &device),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.retrieve") | (AiotApiSurface::App, "devices.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.get_device(context, device_id) {
+                Some(device) => standard_device_response(HttpStatus::Ok, &device),
+                None => device_not_found_response(device_id),
+            }
+        }
+        (AiotApiSurface::Admin, "devices.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let payload = match device_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_device(context, device_id, payload) {
+                Ok(device) => standard_device_response(HttpStatus::Ok, &device),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.delete_device(context, device_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.credentials.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.list_device_credentials(context, device_id) {
+                Ok(credentials) => standard_device_credential_collection_response(&credentials),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.credentials.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let credential_id = credential_id.as_deref().unwrap_or("unknown-credential");
+            match server.get_device_credential(context, device_id, credential_id) {
+                Ok(record) => standard_device_credential_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.credentials.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let payload = match credential_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_device_credential(context, device_id, payload) {
+                Ok(record) => standard_device_credential_response(HttpStatus::Created, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.credentials.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let credential_id = credential_id.as_deref().unwrap_or("unknown-credential");
+            match server.delete_device_credential(context, device_id, credential_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.twin.retrieve")
+        | (AiotApiSurface::App, "devices.twin.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            match server.get_twin_snapshot(context, device_id) {
+                Ok(snapshot) => standard_twin_response(&snapshot),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "devices.twin.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let payload = match twin_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_twin(context, device_id, payload) {
+                Ok(snapshot) => standard_twin_response(&snapshot),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::App, "devices.commands.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let device_id = device_id.as_deref().unwrap_or("unknown-device");
+            let command_payload = match command_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_command(context, device_id, command_payload) {
+                Ok(command) => standard_command_response(HttpStatus::Accepted, &command),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareArtifacts.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_firmware_artifacts(context) {
+                Ok(artifacts) => standard_firmware_artifact_collection_response(&artifacts),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareArtifacts.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match firmware_artifact_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_firmware_artifact(context, payload) {
+                Ok(record) => standard_firmware_artifact_response(HttpStatus::Created, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareArtifacts.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let artifact_id = artifact_id.as_deref().unwrap_or("unknown-artifact");
+            match server.get_firmware_artifact(context, artifact_id) {
+                Ok(record) => standard_firmware_artifact_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareArtifacts.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let artifact_id = artifact_id.as_deref().unwrap_or("unknown-artifact");
+            let payload = match firmware_artifact_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_firmware_artifact(context, artifact_id, payload) {
+                Ok(record) => standard_firmware_artifact_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareArtifacts.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let artifact_id = artifact_id.as_deref().unwrap_or("unknown-artifact");
+            match server.delete_firmware_artifact(context, artifact_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareRollouts.list") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            match server.list_firmware_rollouts(context) {
+                Ok(rollouts) => standard_firmware_rollout_collection_response(&rollouts),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareRollouts.create") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let payload = match firmware_rollout_create_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.create_firmware_rollout(context, payload) {
+                Ok(record) => standard_firmware_rollout_response(HttpStatus::Accepted, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareRollouts.retrieve") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let rollout_id = rollout_id.as_deref().unwrap_or("unknown-rollout");
+            match server.get_firmware_rollout(context, rollout_id) {
+                Ok(record) => standard_firmware_rollout_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareRollouts.update") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let rollout_id = rollout_id.as_deref().unwrap_or("unknown-rollout");
+            let payload = match firmware_rollout_update_payload_from_request(request) {
+                Ok(payload) => payload,
+                Err(problem) => return problem,
+            };
+            match server.update_firmware_rollout(context, rollout_id, payload) {
+                Ok(record) => standard_firmware_rollout_response(HttpStatus::Ok, &record),
+                Err(problem) => problem,
+            }
+        }
+        (AiotApiSurface::Admin, "firmwareRollouts.delete") => {
+            let Some(context) = request_context else {
+                return problem_response(
+                    HttpStatus::Forbidden,
+                    "api.context.missing",
+                    "Resolved appbase context is required",
+                );
+            };
+            let rollout_id = rollout_id.as_deref().unwrap_or("unknown-rollout");
+            match server.delete_firmware_rollout(context, rollout_id) {
+                Ok(()) => HttpResponse::new(HttpStatus::NoContent),
+                Err(problem) => problem,
+            }
         }
         _ => problem_response(
             HttpStatus::NotFound,
@@ -406,6 +2223,28 @@ fn route_path_matches(template: &str, path: &str) -> bool {
         })
 }
 
+fn route_parameter_value(template: &str, path: &str, parameter_name: &str) -> Option<String> {
+    let template_segments = template.trim_matches('/').split('/').collect::<Vec<_>>();
+    let path_segments = path.trim_matches('/').split('/').collect::<Vec<_>>();
+
+    if template_segments.len() != path_segments.len() {
+        return None;
+    }
+
+    template_segments.iter().zip(path_segments.iter()).find_map(
+        |(template_segment, path_segment)| {
+            let param = template_segment
+                .strip_prefix('{')
+                .and_then(|value| value.strip_suffix('}'))?;
+            if param == parameter_name {
+                Some((*path_segment).to_string())
+            } else {
+                None
+            }
+        },
+    )
+}
+
 fn permission_scope_headers(request: &HttpRequest) -> Vec<&str> {
     optional_header(request, "x-sdkwork-permission-scope")
         .into_iter()
@@ -432,6 +2271,127 @@ fn optional_header<'a>(request: &'a HttpRequest, name: &str) -> Option<&'a str> 
 
 fn parse_i64(value: &str) -> Result<i64, std::num::ParseIntError> {
     value.parse::<i64>()
+}
+
+fn request_context_to_storage_association(
+    context: &AiotRequestContext,
+) -> Result<AiotStorageAssociation, HttpResponse> {
+    let tenant_id = parse_i64(&context.tenant_id).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.context.invalid_tenant_id",
+            "Resolved tenant id is invalid",
+        )
+    })?;
+    let organization_id = parse_i64(&context.organization_id).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.context.invalid_organization_id",
+            "Resolved organization id is invalid",
+        )
+    })?;
+
+    let mut association = AiotStorageAssociation::tenant_org(tenant_id, organization_id);
+    if let Some(user_id) = context.user_id.as_deref() {
+        let user_id = parse_i64(user_id).map_err(|_| {
+            problem_response(
+                HttpStatus::BadRequest,
+                "api.context.invalid_user_id",
+                "Resolved user id is invalid",
+            )
+        })?;
+        association = association.with_user_id(user_id);
+    }
+
+    Ok(association)
+}
+
+fn device_repository_error_to_response(error: AiotDeviceRepositoryError) -> HttpResponse {
+    match error {
+        AiotDeviceRepositoryError::DuplicateDeviceId => problem_response(
+            HttpStatus::Conflict,
+            "api.device.duplicate_device_id",
+            "Device id already exists",
+        ),
+        AiotDeviceRepositoryError::InvalidProductId => problem_response(
+            HttpStatus::BadRequest,
+            "api.device.invalid_product_id",
+            "Product id must be an int64 string",
+        ),
+        AiotDeviceRepositoryError::NotFound => {
+            problem_response(HttpStatus::NotFound, "api.device.not_found", "Not Found")
+        }
+        AiotDeviceRepositoryError::PersistenceFailure => problem_response(
+            HttpStatus::InternalServerError,
+            "api.storage.write_failed",
+            "Storage write failed",
+        ),
+    }
+}
+
+fn command_repository_error_to_response(error: AiotCommandRepositoryError) -> HttpResponse {
+    match error {
+        AiotCommandRepositoryError::DuplicateCommandId => problem_response(
+            HttpStatus::Conflict,
+            "api.command.duplicate_command_id",
+            "Command id already exists",
+        ),
+        AiotCommandRepositoryError::PersistenceFailure => problem_response(
+            HttpStatus::InternalServerError,
+            "api.storage.read_write_failed",
+            "Storage read/write failed",
+        ),
+    }
+}
+
+fn event_repository_error_to_response(error: AiotEventRepositoryError) -> HttpResponse {
+    match error {
+        AiotEventRepositoryError::PersistenceFailure => problem_response(
+            HttpStatus::InternalServerError,
+            "api.storage.read_failed",
+            "Storage read failed",
+        ),
+    }
+}
+
+fn twin_repository_error_to_response(error: AiotDeviceTwinRepositoryError) -> HttpResponse {
+    match error {
+        AiotDeviceTwinRepositoryError::PersistenceFailure => problem_response(
+            HttpStatus::InternalServerError,
+            "api.storage.read_write_failed",
+            "Storage read/write failed",
+        ),
+    }
+}
+
+fn firmware_repository_error_to_response(error: AiotFirmwareRepositoryError) -> HttpResponse {
+    match error {
+        AiotFirmwareRepositoryError::DuplicateArtifactId => problem_response(
+            HttpStatus::Conflict,
+            "api.firmware.artifact.duplicate_id",
+            "Firmware artifact id already exists",
+        ),
+        AiotFirmwareRepositoryError::DuplicateRolloutId => problem_response(
+            HttpStatus::Conflict,
+            "api.firmware.rollout.duplicate_id",
+            "Firmware rollout id already exists",
+        ),
+        AiotFirmwareRepositoryError::ArtifactNotFound => problem_response(
+            HttpStatus::NotFound,
+            "api.firmware.artifact.not_found",
+            "Firmware artifact not found",
+        ),
+        AiotFirmwareRepositoryError::RolloutNotFound => problem_response(
+            HttpStatus::NotFound,
+            "api.firmware.rollout.not_found",
+            "Firmware rollout not found",
+        ),
+        AiotFirmwareRepositoryError::InvalidReference => problem_response(
+            HttpStatus::BadRequest,
+            "api.firmware.artifact.invalid_reference",
+            "Firmware artifact reference is invalid",
+        ),
+    }
 }
 
 fn protocol_adapters_json(runtime: &AiotRuntime) -> String {
@@ -509,10 +2469,2352 @@ fn runtime_capacity_json() -> String {
     )
 }
 
-fn standard_empty_collection_response() -> HttpResponse {
+fn standard_product_catalog() -> Vec<Product> {
+    vec![
+        Product::new("9001", "Xiaozhi Voice Assistant"),
+        Product::new("9002", "Edge Audio Gateway"),
+    ]
+}
+
+fn standard_product_records() -> Vec<AiotProductRecord> {
+    vec![
+        AiotProductRecord {
+            product_id: "9001".to_string(),
+            display_name: "Xiaozhi Voice Assistant".to_string(),
+            default_hardware_profile_id: "hw-esp32-s3".to_string(),
+            default_protocol_profile_id: "proto-xiaozhi".to_string(),
+            default_capability_model_id: "capmodel-xiaozhi-core".to_string(),
+            status: "active".to_string(),
+        },
+        AiotProductRecord {
+            product_id: "9002".to_string(),
+            display_name: "Edge Audio Gateway".to_string(),
+            default_hardware_profile_id: "hw-raspberry-pi-5".to_string(),
+            default_protocol_profile_id: "proto-mqtt-standard".to_string(),
+            default_capability_model_id: "capmodel-edge-gateway".to_string(),
+            status: "active".to_string(),
+        },
+    ]
+}
+
+fn standard_hardware_profile_catalog() -> Vec<HardwareProfile> {
+    vec![
+        HardwareProfile::new("hw-esp32-s3", "esp32_s3")
+            .with_hardware_class(HardwareClass::Mcu)
+            .with_runtime("esp_idf")
+            .with_runtime("freertos")
+            .with_connectivity("wifi")
+            .with_connectivity("ble")
+            .with_security_profile("secure_boot")
+            .with_security_profile("flash_encryption")
+            .with_security_profile("device_secret")
+            .with_ota_profile("xiaozhi_ota"),
+        HardwareProfile::new("hw-raspberry-pi-5", "bcm2712")
+            .with_hardware_class(HardwareClass::LinuxSbc)
+            .with_hardware_class(HardwareClass::EdgeGateway)
+            .with_runtime("linux")
+            .with_runtime("docker")
+            .with_runtime("home_assistant")
+            .with_connectivity("ethernet")
+            .with_connectivity("wifi")
+            .with_connectivity("zigbee_usb")
+            .with_security_profile("tpm")
+            .with_security_profile("secure_boot")
+            .with_ota_profile("apt_container_image"),
+    ]
+}
+
+fn standard_hardware_profile_records() -> Vec<AiotHardwareProfileRecord> {
+    vec![
+        AiotHardwareProfileRecord {
+            hardware_profile_id: "hw-esp32-s3".to_string(),
+            chip_family: "esp32_s3".to_string(),
+            hardware_classes: vec!["mcu".to_string()],
+            runtime_profiles: vec!["esp_idf".to_string(), "freertos".to_string()],
+            connectivity_profiles: vec!["wifi".to_string(), "ble".to_string()],
+            security_profiles: vec![
+                "secure_boot".to_string(),
+                "flash_encryption".to_string(),
+                "device_secret".to_string(),
+            ],
+            ota_profiles: vec!["xiaozhi_ota".to_string()],
+            status: "active".to_string(),
+        },
+        AiotHardwareProfileRecord {
+            hardware_profile_id: "hw-raspberry-pi-5".to_string(),
+            chip_family: "bcm2712".to_string(),
+            hardware_classes: vec!["linux_sbc".to_string(), "edge_gateway".to_string()],
+            runtime_profiles: vec![
+                "linux".to_string(),
+                "docker".to_string(),
+                "home_assistant".to_string(),
+            ],
+            connectivity_profiles: vec![
+                "ethernet".to_string(),
+                "wifi".to_string(),
+                "zigbee_usb".to_string(),
+            ],
+            security_profiles: vec!["tpm".to_string(), "secure_boot".to_string()],
+            ota_profiles: vec!["apt_container_image".to_string()],
+            status: "active".to_string(),
+        },
+    ]
+}
+
+fn standard_protocol_profile_catalog() -> Vec<ProtocolProfile> {
+    vec![
+        ProtocolProfile::new("proto-xiaozhi", "xiaozhi.websocket")
+            .allow_transport("websocket")
+            .allow_transport("http")
+            .allow_transport("mqtt")
+            .allow_transport("udp")
+            .allow_message_class("handshake")
+            .allow_message_class("commandRequest")
+            .allow_message_class("commandResult")
+            .allow_message_class("mediaFrame")
+            .allow_message_class("otaCheck")
+            .allow_message_class("otaDeploy"),
+        ProtocolProfile::new("proto-mqtt-standard", "mqtt.v5")
+            .allow_transport("mqtt")
+            .allow_message_class("telemetry")
+            .allow_message_class("event")
+            .allow_message_class("propertyReport")
+            .allow_message_class("propertySet"),
+    ]
+}
+
+fn standard_protocol_profile_records() -> Vec<AiotProtocolProfileRecord> {
+    let protocol_catalog = standard_protocol_catalog();
+    let mut records = Vec::new();
+    for profile in standard_protocol_profile_catalog() {
+        let scope = protocol_catalog
+            .iter()
+            .find(|entry| entry.protocol_id == profile.default_protocol_id)
+            .map(|entry| protocol_scope_name(entry.scope).to_string())
+            .unwrap_or_else(|| "StandardAdapter".to_string());
+        let capability_bridges = protocol_catalog
+            .iter()
+            .find(|entry| entry.protocol_id == profile.default_protocol_id)
+            .map(|entry| {
+                entry
+                    .capability_bridges
+                    .iter()
+                    .map(capability_bridge_name)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        records.push(AiotProtocolProfileRecord {
+            protocol_profile_id: profile.profile_id,
+            default_protocol_id: profile.default_protocol_id,
+            scope,
+            allowed_transports: profile.allowed_transports,
+            allowed_message_classes: profile.allowed_message_classes,
+            capability_bridges,
+            status: "active".to_string(),
+        });
+    }
+    records
+}
+
+fn standard_capability_models() -> Vec<AiotCapabilityModel> {
+    vec![
+        AiotCapabilityModel {
+            capability_model_id: "capmodel-xiaozhi-core".to_string(),
+            display_name: "Xiaozhi Core Capability Model".to_string(),
+            version: "1.0.0".to_string(),
+            capabilities: vec![
+                CapabilityDefinition::new("audio.capture", CapabilityKind::Media)
+                    .with_command("startCapture")
+                    .with_command("stopCapture")
+                    .with_event("audioChunk")
+                    .with_protocol_mapping("xiaozhi.websocket", "listen")
+                    .with_protocol_mapping("xiaozhi.mqtt_udp", "listen"),
+                CapabilityDefinition::new("audio.playback", CapabilityKind::Media)
+                    .with_command("speak")
+                    .with_command("stop")
+                    .with_event("playbackCompleted")
+                    .with_protocol_mapping("xiaozhi.websocket", "tts")
+                    .with_protocol_mapping("xiaozhi.mqtt_udp", "tts"),
+                CapabilityDefinition::new("system.reboot", CapabilityKind::Command)
+                    .with_command("rebootNow")
+                    .with_event("rebooted")
+                    .with_protocol_mapping("xiaozhi.websocket", "system.reboot"),
+            ],
+        },
+        AiotCapabilityModel {
+            capability_model_id: "capmodel-edge-gateway".to_string(),
+            display_name: "Edge Gateway Capability Model".to_string(),
+            version: "1.0.0".to_string(),
+            capabilities: vec![
+                CapabilityDefinition::new("gateway.topology", CapabilityKind::Event)
+                    .with_event("topologyChanged")
+                    .with_protocol_mapping("mqtt.v5", "gateway/topology")
+                    .with_protocol_mapping("raspberrypi.linux_gateway", "gateway.topology"),
+                CapabilityDefinition::new("device.shadow", CapabilityKind::Property)
+                    .with_command("patchDesired")
+                    .with_event("reportedChanged")
+                    .with_protocol_mapping("mqtt.v5", "devices/{deviceId}/shadow"),
+            ],
+        },
+    ]
+}
+
+fn standard_capability_model_records() -> Vec<AiotCapabilityModelRecord> {
+    standard_capability_models()
+        .into_iter()
+        .map(|model| AiotCapabilityModelRecord {
+            capability_model_id: model.capability_model_id,
+            display_name: model.display_name,
+            version: model.version,
+            capabilities: model.capabilities,
+            status: "active".to_string(),
+        })
+        .collect()
+}
+
+fn standard_product_collection_response(products: &[Product]) -> HttpResponse {
+    let items = products
+        .iter()
+        .map(product_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
     HttpResponse::new(HttpStatus::Ok)
         .with_header("content-type", "application/json")
-        .with_body(r#"{"code":"0","data":[]}"#)
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn standard_hardware_profile_collection_response(profiles: &[HardwareProfile]) -> HttpResponse {
+    let items = profiles
+        .iter()
+        .map(hardware_profile_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn standard_protocol_profile_collection_response(profiles: &[ProtocolProfile]) -> HttpResponse {
+    let protocol_catalog = standard_protocol_catalog();
+    let items = profiles
+        .iter()
+        .map(|profile| protocol_profile_resource_json(profile, &protocol_catalog))
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn standard_capability_model_response(capability_model_id: &str) -> HttpResponse {
+    let models = standard_capability_models();
+    let Some(model) = models
+        .iter()
+        .find(|model| model.capability_model_id == capability_model_id)
+    else {
+        return problem_response(
+            HttpStatus::NotFound,
+            "api.capability_model.not_found",
+            "Capability model not found",
+        );
+    };
+
+    standard_resource_response(HttpStatus::Ok, capability_model_resource_json(model))
+}
+
+fn product_resource_json(product: &Product) -> String {
+    format!(
+        r#"{{"productId":"{}","displayName":"{}","defaultHardwareProfileId":"{}","defaultProtocolProfileId":"{}","defaultCapabilityModelId":"{}","status":"active"}}"#,
+        json_escape(&product.product_id),
+        json_escape(&product.display_name),
+        if product.product_id == "9002" {
+            "hw-raspberry-pi-5"
+        } else {
+            "hw-esp32-s3"
+        },
+        if product.product_id == "9002" {
+            "proto-mqtt-standard"
+        } else {
+            "proto-xiaozhi"
+        },
+        if product.product_id == "9002" {
+            "capmodel-edge-gateway"
+        } else {
+            "capmodel-xiaozhi-core"
+        },
+    )
+}
+
+fn hardware_profile_resource_json(profile: &HardwareProfile) -> String {
+    let classes = profile
+        .hardware_classes
+        .iter()
+        .map(hardware_class_name)
+        .collect::<Vec<_>>();
+    format!(
+        r#"{{"hardwareProfileId":"{}","chipFamily":"{}","hardwareClasses":[{}],"runtimeProfiles":[{}],"connectivityProfiles":[{}],"securityProfiles":[{}],"otaProfiles":[{}]}}"#,
+        json_escape(&profile.profile_id),
+        json_escape(&profile.chip_family),
+        str_array(classes.iter().copied()),
+        string_array(profile.runtime_profiles.iter()),
+        string_array(profile.connectivity_profiles.iter()),
+        string_array(profile.security_profiles.iter()),
+        string_array(profile.ota_profiles.iter()),
+    )
+}
+
+fn protocol_profile_resource_json(
+    profile: &ProtocolProfile,
+    catalog: &[sdkwork_aiot_protocol::ProtocolCatalogEntry],
+) -> String {
+    let capability_bridges = catalog
+        .iter()
+        .find(|entry| entry.protocol_id == profile.default_protocol_id)
+        .map(|entry| {
+            entry
+                .capability_bridges
+                .iter()
+                .map(capability_bridge_name)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let scope = catalog
+        .iter()
+        .find(|entry| entry.protocol_id == profile.default_protocol_id)
+        .map(|entry| protocol_scope_name(entry.scope))
+        .unwrap_or("StandardAdapter");
+    format!(
+        r#"{{"protocolProfileId":"{}","defaultProtocolId":"{}","scope":"{}","allowedTransports":[{}],"allowedMessageClasses":[{}],"capabilityBridges":[{}]}}"#,
+        json_escape(&profile.profile_id),
+        json_escape(&profile.default_protocol_id),
+        scope,
+        string_array(profile.allowed_transports.iter()),
+        string_array(profile.allowed_message_classes.iter()),
+        str_array(capability_bridges.iter().copied()),
+    )
+}
+
+fn capability_model_resource_json(model: &AiotCapabilityModel) -> String {
+    let capabilities = model
+        .capabilities
+        .iter()
+        .map(capability_definition_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        r#"{{"capabilityModelId":"{}","displayName":"{}","version":"{}","capabilities":[{}]}}"#,
+        json_escape(&model.capability_model_id),
+        json_escape(&model.display_name),
+        json_escape(&model.version),
+        capabilities,
+    )
+}
+
+fn capability_definition_resource_json(definition: &CapabilityDefinition) -> String {
+    let mappings = definition
+        .protocol_mappings
+        .iter()
+        .map(|(protocol_id, mapped_name)| {
+            format!(
+                r#"{{"protocolId":"{}","mappedName":"{}"}}"#,
+                json_escape(protocol_id),
+                json_escape(mapped_name)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        r#"{{"capabilityName":"{}","capabilityKind":"{}","commands":[{}],"events":[{}],"protocolMappings":[{}]}}"#,
+        json_escape(&definition.name),
+        capability_kind_name(definition.kind),
+        string_array(definition.commands.iter()),
+        string_array(definition.events.iter()),
+        mappings,
+    )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotFirmwareArtifactRecord {
+    artifact_id: String,
+    tenant_id: i64,
+    organization_id: i64,
+    artifact_key: String,
+    version: String,
+    media_resource_id: String,
+    resource_json: String,
+    sha256: String,
+    signature: Option<String>,
+    target_chip_family: Option<String>,
+    target_runtime_profile: Option<String>,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotFirmwareRolloutRecord {
+    rollout_id: String,
+    tenant_id: i64,
+    organization_id: i64,
+    artifact_id: String,
+    target_policy_json: String,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotDeviceSessionRecord {
+    session_id: String,
+    device_id: String,
+    status: String,
+    connected_at: Option<String>,
+    disconnected_at: Option<String>,
+    transport: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotDeviceCapabilityRecord {
+    capability_name: String,
+    capability_kind: String,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotDeviceCredentialRecord {
+    credential_id: String,
+    tenant_id: i64,
+    organization_id: i64,
+    device_id: String,
+    credential_type: String,
+    status: String,
+    expires_at: Option<String>,
+    created_at: String,
+    revoked_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotCapabilityModel {
+    capability_model_id: String,
+    display_name: String,
+    version: String,
+    capabilities: Vec<CapabilityDefinition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotProductRecord {
+    product_id: String,
+    display_name: String,
+    default_hardware_profile_id: String,
+    default_protocol_profile_id: String,
+    default_capability_model_id: String,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotHardwareProfileRecord {
+    hardware_profile_id: String,
+    chip_family: String,
+    hardware_classes: Vec<String>,
+    runtime_profiles: Vec<String>,
+    connectivity_profiles: Vec<String>,
+    security_profiles: Vec<String>,
+    ota_profiles: Vec<String>,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotProtocolProfileRecord {
+    protocol_profile_id: String,
+    default_protocol_id: String,
+    scope: String,
+    allowed_transports: Vec<String>,
+    allowed_message_classes: Vec<String>,
+    capability_bridges: Vec<String>,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AiotCapabilityModelRecord {
+    capability_model_id: String,
+    display_name: String,
+    version: String,
+    capabilities: Vec<CapabilityDefinition>,
+    status: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AiotCatalogRepositoryError {
+    DuplicateProductId,
+    DuplicateHardwareProfileId,
+    DuplicateProtocolProfileId,
+    DuplicateCapabilityModelId,
+    ProductNotFound,
+    HardwareProfileNotFound,
+    ProtocolProfileNotFound,
+    CapabilityModelNotFound,
+}
+
+#[derive(Debug, Clone)]
+struct AiotProductCreatePayload {
+    product_id: String,
+    display_name: String,
+    default_hardware_profile_id: String,
+    default_protocol_profile_id: String,
+    default_capability_model_id: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotProductUpdatePayload {
+    display_name: Option<String>,
+    default_hardware_profile_id: Option<String>,
+    default_protocol_profile_id: Option<String>,
+    default_capability_model_id: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotHardwareProfileCreatePayload {
+    hardware_profile_id: String,
+    chip_family: String,
+    hardware_classes: Vec<String>,
+    runtime_profiles: Vec<String>,
+    connectivity_profiles: Vec<String>,
+    security_profiles: Vec<String>,
+    ota_profiles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotHardwareProfileUpdatePayload {
+    chip_family: Option<String>,
+    hardware_classes: Option<Vec<String>>,
+    runtime_profiles: Option<Vec<String>>,
+    connectivity_profiles: Option<Vec<String>>,
+    security_profiles: Option<Vec<String>>,
+    ota_profiles: Option<Vec<String>>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotProtocolProfileCreatePayload {
+    protocol_profile_id: String,
+    default_protocol_id: String,
+    scope: String,
+    allowed_transports: Vec<String>,
+    allowed_message_classes: Vec<String>,
+    capability_bridges: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotProtocolProfileUpdatePayload {
+    default_protocol_id: Option<String>,
+    scope: Option<String>,
+    allowed_transports: Option<Vec<String>>,
+    allowed_message_classes: Option<Vec<String>>,
+    capability_bridges: Option<Vec<String>>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotCapabilityModelCreatePayload {
+    capability_model_id: String,
+    display_name: String,
+    version: String,
+    capabilities: Vec<CapabilityDefinition>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotCapabilityModelUpdatePayload {
+    display_name: Option<String>,
+    version: Option<String>,
+    capabilities: Option<Vec<CapabilityDefinition>>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotFirmwareArtifactCreatePayload {
+    artifact_key: String,
+    version: String,
+    resource_json: String,
+    media_resource_id: String,
+    object_blob_id: Option<String>,
+    sha256: String,
+    signature: Option<String>,
+    target_chip_family: Option<String>,
+    target_runtime_profile: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotFirmwareArtifactUpdatePayload {
+    artifact_key: Option<String>,
+    version: Option<String>,
+    resource_json: Option<String>,
+    media_resource_id: Option<String>,
+    object_blob_id: Option<String>,
+    sha256: Option<String>,
+    signature: Option<String>,
+    target_chip_family: Option<String>,
+    target_runtime_profile: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotFirmwareRolloutCreatePayload {
+    artifact_id: String,
+    target_policy_json: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotFirmwareRolloutUpdatePayload {
+    target_policy_json: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AiotFirmwareRepositoryError {
+    DuplicateArtifactId,
+    DuplicateRolloutId,
+    ArtifactNotFound,
+    RolloutNotFound,
+    InvalidReference,
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotFirmwareRepositoryState {
+    next_artifact_id: u64,
+    next_rollout_id: u64,
+    artifacts: BTreeMap<String, AiotFirmwareArtifactRecord>,
+    rollouts: BTreeMap<String, AiotFirmwareRolloutRecord>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotFirmwareRepository {
+    state: Arc<Mutex<InMemoryAiotFirmwareRepositoryState>>,
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotCredentialRepositoryState {
+    next_credential_id: u64,
+    credentials: BTreeMap<String, AiotDeviceCredentialRecord>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotCredentialRepository {
+    state: Arc<Mutex<InMemoryAiotCredentialRepositoryState>>,
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotCatalogRepositoryState {
+    products: BTreeMap<String, AiotProductRecord>,
+    hardware_profiles: BTreeMap<String, AiotHardwareProfileRecord>,
+    protocol_profiles: BTreeMap<String, AiotProtocolProfileRecord>,
+    capability_models: BTreeMap<String, AiotCapabilityModelRecord>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotCatalogRepository {
+    state: Arc<Mutex<InMemoryAiotCatalogRepositoryState>>,
+}
+
+impl InMemoryAiotFirmwareRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn create_artifact(
+        &self,
+        association: AiotStorageAssociation,
+        payload: AiotFirmwareArtifactCreatePayload,
+    ) -> Result<AiotFirmwareArtifactRecord, AiotFirmwareRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory firmware repo poisoned");
+        let artifact_id = format!("firmware-artifact-{:04}", state.next_artifact_id + 1);
+        let key = scoped_firmware_artifact_key(&association, &artifact_id);
+        if state.artifacts.contains_key(&key) {
+            return Err(AiotFirmwareRepositoryError::DuplicateArtifactId);
+        }
+        let resource_json = if let Some(object_blob_id) = payload.object_blob_id.as_deref() {
+            apply_media_object_blob_id(&payload.resource_json, object_blob_id)
+                .unwrap_or_else(|_| payload.resource_json.clone())
+        } else {
+            payload.resource_json.clone()
+        };
+        state.next_artifact_id += 1;
+        let record = AiotFirmwareArtifactRecord {
+            artifact_id,
+            tenant_id: association.tenant_id,
+            organization_id: association.organization_id,
+            artifact_key: payload.artifact_key,
+            version: payload.version,
+            media_resource_id: payload.media_resource_id,
+            resource_json,
+            sha256: payload.sha256,
+            signature: payload.signature,
+            target_chip_family: payload.target_chip_family,
+            target_runtime_profile: payload.target_runtime_profile,
+            status: "active".to_string(),
+        };
+        state.artifacts.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn list_artifacts(
+        &self,
+        association: &AiotStorageAssociation,
+    ) -> Vec<AiotFirmwareArtifactRecord> {
+        self.state
+            .lock()
+            .expect("in-memory firmware repo poisoned")
+            .artifacts
+            .values()
+            .filter(|artifact| {
+                artifact.tenant_id == association.tenant_id
+                    && artifact.organization_id == association.organization_id
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn get_artifact(
+        &self,
+        association: &AiotStorageAssociation,
+        artifact_id: &str,
+    ) -> Option<AiotFirmwareArtifactRecord> {
+        self.state
+            .lock()
+            .expect("in-memory firmware repo poisoned")
+            .artifacts
+            .get(&scoped_firmware_artifact_key(association, artifact_id))
+            .cloned()
+    }
+
+    fn update_artifact(
+        &self,
+        association: AiotStorageAssociation,
+        artifact_id: &str,
+        payload: AiotFirmwareArtifactUpdatePayload,
+    ) -> Result<AiotFirmwareArtifactRecord, AiotFirmwareRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory firmware repo poisoned");
+        let key = scoped_firmware_artifact_key(&association, artifact_id);
+        let Some(record) = state.artifacts.get_mut(&key) else {
+            return Err(AiotFirmwareRepositoryError::ArtifactNotFound);
+        };
+        if let Some(artifact_key) = payload.artifact_key {
+            record.artifact_key = artifact_key;
+        }
+        if let Some(version) = payload.version {
+            record.version = version;
+        }
+        if let Some(resource_json) = payload.resource_json {
+            record.resource_json = resource_json;
+        }
+        if let Some(media_resource_id) = payload.media_resource_id {
+            record.media_resource_id = media_resource_id;
+        }
+        if let Some(object_blob_id) = payload.object_blob_id {
+            if let Ok(resource_json) =
+                apply_media_object_blob_id(&record.resource_json, &object_blob_id)
+            {
+                record.resource_json = resource_json;
+            }
+        }
+        if let Some(sha256) = payload.sha256 {
+            record.sha256 = sha256;
+        }
+        if payload.signature.is_some() {
+            record.signature = payload.signature;
+        }
+        if payload.target_chip_family.is_some() {
+            record.target_chip_family = payload.target_chip_family;
+        }
+        if payload.target_runtime_profile.is_some() {
+            record.target_runtime_profile = payload.target_runtime_profile;
+        }
+        if let Some(status) = payload.status {
+            record.status = status;
+        }
+        Ok(record.clone())
+    }
+
+    fn delete_artifact(
+        &self,
+        association: &AiotStorageAssociation,
+        artifact_id: &str,
+    ) -> Result<(), AiotFirmwareRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory firmware repo poisoned");
+        let key = scoped_firmware_artifact_key(association, artifact_id);
+        if state.artifacts.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotFirmwareRepositoryError::ArtifactNotFound)
+        }
+    }
+
+    fn create_rollout(
+        &self,
+        association: AiotStorageAssociation,
+        payload: AiotFirmwareRolloutCreatePayload,
+    ) -> Result<AiotFirmwareRolloutRecord, AiotFirmwareRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory firmware repo poisoned");
+        let artifact_key = scoped_firmware_artifact_key(&association, &payload.artifact_id);
+        if !state.artifacts.contains_key(&artifact_key) {
+            return Err(AiotFirmwareRepositoryError::InvalidReference);
+        }
+        let rollout_id = format!("firmware-rollout-{:04}", state.next_rollout_id + 1);
+        let key = scoped_firmware_rollout_key(&association, &rollout_id);
+        if state.rollouts.contains_key(&key) {
+            return Err(AiotFirmwareRepositoryError::DuplicateRolloutId);
+        }
+        state.next_rollout_id += 1;
+        let record = AiotFirmwareRolloutRecord {
+            rollout_id,
+            tenant_id: association.tenant_id,
+            organization_id: association.organization_id,
+            artifact_id: payload.artifact_id,
+            target_policy_json: payload.target_policy_json,
+            status: "accepted".to_string(),
+        };
+        state.rollouts.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn list_rollouts(
+        &self,
+        association: &AiotStorageAssociation,
+    ) -> Vec<AiotFirmwareRolloutRecord> {
+        self.state
+            .lock()
+            .expect("in-memory firmware repo poisoned")
+            .rollouts
+            .values()
+            .filter(|rollout| {
+                rollout.tenant_id == association.tenant_id
+                    && rollout.organization_id == association.organization_id
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn get_rollout(
+        &self,
+        association: &AiotStorageAssociation,
+        rollout_id: &str,
+    ) -> Option<AiotFirmwareRolloutRecord> {
+        self.state
+            .lock()
+            .expect("in-memory firmware repo poisoned")
+            .rollouts
+            .get(&scoped_firmware_rollout_key(association, rollout_id))
+            .cloned()
+    }
+
+    fn update_rollout(
+        &self,
+        association: AiotStorageAssociation,
+        rollout_id: &str,
+        payload: AiotFirmwareRolloutUpdatePayload,
+    ) -> Result<AiotFirmwareRolloutRecord, AiotFirmwareRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory firmware repo poisoned");
+        let key = scoped_firmware_rollout_key(&association, rollout_id);
+        let Some(record) = state.rollouts.get_mut(&key) else {
+            return Err(AiotFirmwareRepositoryError::RolloutNotFound);
+        };
+        if let Some(target_policy_json) = payload.target_policy_json {
+            record.target_policy_json = target_policy_json;
+        }
+        if let Some(status) = payload.status {
+            record.status = status;
+        }
+        Ok(record.clone())
+    }
+
+    fn delete_rollout(
+        &self,
+        association: &AiotStorageAssociation,
+        rollout_id: &str,
+    ) -> Result<(), AiotFirmwareRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory firmware repo poisoned");
+        let key = scoped_firmware_rollout_key(association, rollout_id);
+        if state.rollouts.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotFirmwareRepositoryError::RolloutNotFound)
+        }
+    }
+}
+
+impl InMemoryAiotCredentialRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn create_credential(
+        &self,
+        association: AiotStorageAssociation,
+        command: AiotCredentialCreateCommand,
+    ) -> Result<AiotDeviceCredentialRecord, HttpResponse> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("in-memory credential repo poisoned");
+        state.next_credential_id += 1;
+        let credential_id = format!("credential-{:04}", state.next_credential_id);
+        let key = scoped_device_credential_key(&association, &command.device_id, &credential_id);
+        let record = AiotDeviceCredentialRecord {
+            credential_id,
+            tenant_id: association.tenant_id,
+            organization_id: association.organization_id,
+            device_id: command.device_id,
+            credential_type: command.credential_type,
+            status: "active".to_string(),
+            expires_at: command.expires_at,
+            created_at: "2026-06-01T00:00:00Z".to_string(),
+            revoked_at: None,
+        };
+        state.credentials.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn list_credentials(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Vec<AiotDeviceCredentialRecord> {
+        self.state
+            .lock()
+            .expect("in-memory credential repo poisoned")
+            .credentials
+            .values()
+            .filter(|credential| {
+                credential.tenant_id == association.tenant_id
+                    && credential.organization_id == association.organization_id
+                    && credential.device_id == device_id
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn get_credential(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        credential_id: &str,
+    ) -> Option<AiotDeviceCredentialRecord> {
+        self.state
+            .lock()
+            .expect("in-memory credential repo poisoned")
+            .credentials
+            .get(&scoped_device_credential_key(
+                association,
+                device_id,
+                credential_id,
+            ))
+            .cloned()
+    }
+
+    fn delete_credential(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        credential_id: &str,
+    ) -> Result<(), HttpResponse> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("in-memory credential repo poisoned");
+        let key = scoped_device_credential_key(association, device_id, credential_id);
+        let Some(record) = state.credentials.get_mut(&key) else {
+            return Err(credential_not_found_response(credential_id));
+        };
+        if record.status != "revoked" {
+            record.status = "revoked".to_string();
+            record.revoked_at = Some("2026-06-01T00:00:00Z".to_string());
+        }
+        Ok(())
+    }
+}
+
+impl InMemoryAiotCatalogRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn create_product(
+        &self,
+        association: AiotStorageAssociation,
+        payload: AiotProductCreatePayload,
+    ) -> Result<AiotProductRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, &payload.product_id);
+        if state.products.contains_key(&key) {
+            return Err(AiotCatalogRepositoryError::DuplicateProductId);
+        }
+        let record = AiotProductRecord {
+            product_id: payload.product_id,
+            display_name: payload.display_name,
+            default_hardware_profile_id: payload.default_hardware_profile_id,
+            default_protocol_profile_id: payload.default_protocol_profile_id,
+            default_capability_model_id: payload.default_capability_model_id,
+            status: "active".to_string(),
+        };
+        state.products.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn get_product(
+        &self,
+        association: &AiotStorageAssociation,
+        product_id: &str,
+    ) -> Option<AiotProductRecord> {
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .products
+            .get(&scoped_catalog_key(association, product_id))
+            .cloned()
+    }
+
+    fn update_product(
+        &self,
+        association: AiotStorageAssociation,
+        product_id: &str,
+        payload: AiotProductUpdatePayload,
+    ) -> Result<AiotProductRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, product_id);
+        let Some(record) = state.products.get_mut(&key) else {
+            return Err(AiotCatalogRepositoryError::ProductNotFound);
+        };
+        if let Some(display_name) = payload.display_name {
+            record.display_name = display_name;
+        }
+        if let Some(default_hardware_profile_id) = payload.default_hardware_profile_id {
+            record.default_hardware_profile_id = default_hardware_profile_id;
+        }
+        if let Some(default_protocol_profile_id) = payload.default_protocol_profile_id {
+            record.default_protocol_profile_id = default_protocol_profile_id;
+        }
+        if let Some(default_capability_model_id) = payload.default_capability_model_id {
+            record.default_capability_model_id = default_capability_model_id;
+        }
+        if let Some(status) = payload.status {
+            record.status = status;
+        }
+        Ok(record.clone())
+    }
+
+    fn delete_product(
+        &self,
+        association: &AiotStorageAssociation,
+        product_id: &str,
+    ) -> Result<(), AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(association, product_id);
+        if state.products.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotCatalogRepositoryError::ProductNotFound)
+        }
+    }
+
+    fn create_hardware_profile(
+        &self,
+        association: AiotStorageAssociation,
+        payload: AiotHardwareProfileCreatePayload,
+    ) -> Result<AiotHardwareProfileRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, &payload.hardware_profile_id);
+        if state.hardware_profiles.contains_key(&key) {
+            return Err(AiotCatalogRepositoryError::DuplicateHardwareProfileId);
+        }
+        let record = AiotHardwareProfileRecord {
+            hardware_profile_id: payload.hardware_profile_id,
+            chip_family: payload.chip_family,
+            hardware_classes: payload.hardware_classes,
+            runtime_profiles: payload.runtime_profiles,
+            connectivity_profiles: payload.connectivity_profiles,
+            security_profiles: payload.security_profiles,
+            ota_profiles: payload.ota_profiles,
+            status: "active".to_string(),
+        };
+        state.hardware_profiles.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn get_hardware_profile(
+        &self,
+        association: &AiotStorageAssociation,
+        hardware_profile_id: &str,
+    ) -> Option<AiotHardwareProfileRecord> {
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .hardware_profiles
+            .get(&scoped_catalog_key(association, hardware_profile_id))
+            .cloned()
+    }
+
+    fn update_hardware_profile(
+        &self,
+        association: AiotStorageAssociation,
+        hardware_profile_id: &str,
+        payload: AiotHardwareProfileUpdatePayload,
+    ) -> Result<AiotHardwareProfileRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, hardware_profile_id);
+        let Some(record) = state.hardware_profiles.get_mut(&key) else {
+            return Err(AiotCatalogRepositoryError::HardwareProfileNotFound);
+        };
+        if let Some(chip_family) = payload.chip_family {
+            record.chip_family = chip_family;
+        }
+        if let Some(hardware_classes) = payload.hardware_classes {
+            record.hardware_classes = hardware_classes;
+        }
+        if let Some(runtime_profiles) = payload.runtime_profiles {
+            record.runtime_profiles = runtime_profiles;
+        }
+        if let Some(connectivity_profiles) = payload.connectivity_profiles {
+            record.connectivity_profiles = connectivity_profiles;
+        }
+        if let Some(security_profiles) = payload.security_profiles {
+            record.security_profiles = security_profiles;
+        }
+        if let Some(ota_profiles) = payload.ota_profiles {
+            record.ota_profiles = ota_profiles;
+        }
+        if let Some(status) = payload.status {
+            record.status = status;
+        }
+        Ok(record.clone())
+    }
+
+    fn delete_hardware_profile(
+        &self,
+        association: &AiotStorageAssociation,
+        hardware_profile_id: &str,
+    ) -> Result<(), AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(association, hardware_profile_id);
+        if state.hardware_profiles.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotCatalogRepositoryError::HardwareProfileNotFound)
+        }
+    }
+
+    fn create_protocol_profile(
+        &self,
+        association: AiotStorageAssociation,
+        payload: AiotProtocolProfileCreatePayload,
+    ) -> Result<AiotProtocolProfileRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, &payload.protocol_profile_id);
+        if state.protocol_profiles.contains_key(&key) {
+            return Err(AiotCatalogRepositoryError::DuplicateProtocolProfileId);
+        }
+        let record = AiotProtocolProfileRecord {
+            protocol_profile_id: payload.protocol_profile_id,
+            default_protocol_id: payload.default_protocol_id,
+            scope: payload.scope,
+            allowed_transports: payload.allowed_transports,
+            allowed_message_classes: payload.allowed_message_classes,
+            capability_bridges: payload.capability_bridges,
+            status: "active".to_string(),
+        };
+        state.protocol_profiles.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn get_protocol_profile(
+        &self,
+        association: &AiotStorageAssociation,
+        protocol_profile_id: &str,
+    ) -> Option<AiotProtocolProfileRecord> {
+        self.state
+            .lock()
+            .expect("in-memory catalog repo poisoned")
+            .protocol_profiles
+            .get(&scoped_catalog_key(association, protocol_profile_id))
+            .cloned()
+    }
+
+    fn update_protocol_profile(
+        &self,
+        association: AiotStorageAssociation,
+        protocol_profile_id: &str,
+        payload: AiotProtocolProfileUpdatePayload,
+    ) -> Result<AiotProtocolProfileRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, protocol_profile_id);
+        let Some(record) = state.protocol_profiles.get_mut(&key) else {
+            return Err(AiotCatalogRepositoryError::ProtocolProfileNotFound);
+        };
+        if let Some(default_protocol_id) = payload.default_protocol_id {
+            record.default_protocol_id = default_protocol_id;
+        }
+        if let Some(scope) = payload.scope {
+            record.scope = scope;
+        }
+        if let Some(allowed_transports) = payload.allowed_transports {
+            record.allowed_transports = allowed_transports;
+        }
+        if let Some(allowed_message_classes) = payload.allowed_message_classes {
+            record.allowed_message_classes = allowed_message_classes;
+        }
+        if let Some(capability_bridges) = payload.capability_bridges {
+            record.capability_bridges = capability_bridges;
+        }
+        if let Some(status) = payload.status {
+            record.status = status;
+        }
+        Ok(record.clone())
+    }
+
+    fn delete_protocol_profile(
+        &self,
+        association: &AiotStorageAssociation,
+        protocol_profile_id: &str,
+    ) -> Result<(), AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(association, protocol_profile_id);
+        if state.protocol_profiles.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotCatalogRepositoryError::ProtocolProfileNotFound)
+        }
+    }
+
+    fn create_capability_model(
+        &self,
+        association: AiotStorageAssociation,
+        payload: AiotCapabilityModelCreatePayload,
+    ) -> Result<AiotCapabilityModelRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, &payload.capability_model_id);
+        if state.capability_models.contains_key(&key) {
+            return Err(AiotCatalogRepositoryError::DuplicateCapabilityModelId);
+        }
+        let record = AiotCapabilityModelRecord {
+            capability_model_id: payload.capability_model_id,
+            display_name: payload.display_name,
+            version: payload.version,
+            capabilities: payload.capabilities,
+            status: "active".to_string(),
+        };
+        state.capability_models.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn get_seed_capability_model(&self, capability_model_id: &str) -> Option<AiotCapabilityModelRecord> {
+        standard_capability_model_records()
+            .into_iter()
+            .find(|record| record.capability_model_id == capability_model_id)
+    }
+
+    fn update_capability_model(
+        &self,
+        association: AiotStorageAssociation,
+        capability_model_id: &str,
+        payload: AiotCapabilityModelUpdatePayload,
+    ) -> Result<AiotCapabilityModelRecord, AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(&association, capability_model_id);
+        let Some(record) = state.capability_models.get_mut(&key) else {
+            return Err(AiotCatalogRepositoryError::CapabilityModelNotFound);
+        };
+        if let Some(display_name) = payload.display_name {
+            record.display_name = display_name;
+        }
+        if let Some(version) = payload.version {
+            record.version = version;
+        }
+        if let Some(capabilities) = payload.capabilities {
+            record.capabilities = capabilities;
+        }
+        if let Some(status) = payload.status {
+            record.status = status;
+        }
+        Ok(record.clone())
+    }
+
+    fn delete_capability_model(
+        &self,
+        association: &AiotStorageAssociation,
+        capability_model_id: &str,
+    ) -> Result<(), AiotCatalogRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory catalog repo poisoned");
+        let key = scoped_catalog_key(association, capability_model_id);
+        if state.capability_models.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotCatalogRepositoryError::CapabilityModelNotFound)
+        }
+    }
+}
+
+fn scoped_firmware_artifact_key(association: &AiotStorageAssociation, artifact_id: &str) -> String {
+    format!(
+        "{}:{}:{}",
+        association.tenant_id, association.organization_id, artifact_id
+    )
+}
+
+fn scoped_firmware_rollout_key(association: &AiotStorageAssociation, rollout_id: &str) -> String {
+    format!(
+        "{}:{}:{}",
+        association.tenant_id, association.organization_id, rollout_id
+    )
+}
+
+fn scoped_device_credential_key(
+    association: &AiotStorageAssociation,
+    device_id: &str,
+    credential_id: &str,
+) -> String {
+    format!(
+        "{}:{}:{}:{}",
+        association.tenant_id, association.organization_id, device_id, credential_id
+    )
+}
+
+#[derive(Debug, Clone)]
+struct AiotDeviceCreatePayload {
+    device_id: String,
+    display_name: String,
+    product_id: String,
+    client_id: Option<String>,
+    chip_family: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotCredentialCreatePayload {
+    credential_type: String,
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AiotCredentialCreateCommand {
+    device_id: String,
+    credential_type: String,
+    expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotTwinUpdatePayload {
+    desired: BTreeMap<String, String>,
+    reported: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct AiotDeviceUpdatePayload {
+    display_name: Option<String>,
+    status: Option<String>,
+    metadata_json: Option<String>,
+}
+
+fn device_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotDeviceCreatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let device_id = required_json_string_field(obj, "deviceId")?;
+    let display_name = required_json_string_field(obj, "displayName")?;
+    let product_id = required_json_int64_string_field(obj, "productId")?;
+
+    Ok(AiotDeviceCreatePayload {
+        device_id,
+        display_name,
+        product_id,
+        client_id: optional_json_string_field(obj, "clientId"),
+        chip_family: optional_json_string_field(obj, "chipFamily"),
+    })
+}
+
+fn firmware_artifact_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotFirmwareArtifactCreatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let artifact_key = required_json_string_field(obj, "artifactKey")?;
+    let version = required_json_string_field(obj, "version")?;
+    let sha256 = required_json_string_field(obj, "sha256")?;
+    let resource_value = obj.get("resource").ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            "Field resource is required",
+        )
+    })?;
+    if !resource_value.is_object() {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            "Field resource must be a JSON object",
+        ));
+    }
+    let resource_obj = resource_value.as_object().expect("resource object checked");
+    let media_resource_id = json_object_string_field(resource_obj, "id")
+        .map(str::to_string)
+        .or_else(|| optional_json_string_field(obj, "mediaResourceId"))
+        .ok_or_else(|| {
+            problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field resource.id or mediaResourceId is required",
+            )
+        })?;
+    let object_blob_id = json_object_string_field(resource_obj, "objectBlobId")
+        .map(str::to_string)
+        .or_else(|| optional_json_string_field(obj, "objectBlobId"));
+
+    Ok(AiotFirmwareArtifactCreatePayload {
+        artifact_key,
+        version,
+        resource_json: resource_value.to_string(),
+        media_resource_id,
+        object_blob_id,
+        sha256,
+        signature: optional_json_string_field(obj, "signature"),
+        target_chip_family: optional_json_string_field(obj, "targetChipFamily"),
+        target_runtime_profile: optional_json_string_field(obj, "targetRuntimeProfile"),
+    })
+}
+
+fn firmware_artifact_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotFirmwareArtifactUpdatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Ok(AiotFirmwareArtifactUpdatePayload::default());
+    }
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let mut payload = AiotFirmwareArtifactUpdatePayload {
+        artifact_key: optional_json_string_field(obj, "artifactKey"),
+        version: optional_json_string_field(obj, "version"),
+        resource_json: obj.get("resource").map(JsonValue::to_string),
+        media_resource_id: optional_json_string_field(obj, "mediaResourceId"),
+        object_blob_id: optional_json_string_field(obj, "objectBlobId"),
+        sha256: optional_json_string_field(obj, "sha256"),
+        signature: optional_json_string_field(obj, "signature"),
+        target_chip_family: optional_json_string_field(obj, "targetChipFamily"),
+        target_runtime_profile: optional_json_string_field(obj, "targetRuntimeProfile"),
+        status: optional_json_string_field(obj, "status"),
+    };
+
+    if let Some(resource_json) = payload.resource_json.as_deref() {
+        let parsed: JsonValue = serde_json::from_str(resource_json).map_err(|_| {
+            problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field resource must be a valid JSON object",
+            )
+        })?;
+        if !parsed.is_object() {
+            return Err(problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field resource must be a JSON object",
+            ));
+        }
+        if payload.media_resource_id.is_none() {
+            payload.media_resource_id = parsed
+                .as_object()
+                .and_then(|obj| json_object_string_field(obj, "id"))
+                .map(str::to_string);
+        }
+        if payload.object_blob_id.is_none() {
+            payload.object_blob_id = parsed
+                .as_object()
+                .and_then(|obj| json_object_string_field(obj, "objectBlobId"))
+                .map(str::to_string);
+        }
+    }
+
+    Ok(payload)
+}
+
+fn firmware_rollout_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotFirmwareRolloutCreatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+    let artifact_id = required_json_string_field(obj, "artifactId")?;
+    let target_policy_json = obj
+        .get("targetPolicy")
+        .map(JsonValue::to_string)
+        .ok_or_else(|| {
+            problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field targetPolicy is required",
+            )
+        })?;
+    Ok(AiotFirmwareRolloutCreatePayload {
+        artifact_id,
+        target_policy_json,
+    })
+}
+
+fn firmware_rollout_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotFirmwareRolloutUpdatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Ok(AiotFirmwareRolloutUpdatePayload::default());
+    }
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+    Ok(AiotFirmwareRolloutUpdatePayload {
+        target_policy_json: obj.get("targetPolicy").map(JsonValue::to_string),
+        status: optional_json_string_field(obj, "status"),
+    })
+}
+
+fn device_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotDeviceUpdatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Ok(AiotDeviceUpdatePayload::default());
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let display_name = optional_json_string_field(obj, "displayName");
+    let status = optional_json_string_field(obj, "status");
+    let metadata_json = obj.get("metadata").map(|value| value.to_string());
+
+    Ok(AiotDeviceUpdatePayload {
+        display_name,
+        status,
+        metadata_json,
+    })
+}
+
+fn credential_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotCredentialCreatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let credential_type = required_json_enum_field(
+        obj,
+        "credentialType",
+        &["bearer_token", "hmac", "mtls_x509", "hardware_attestation"],
+    )?;
+    let expires_at = optional_json_string_field(obj, "expiresAt");
+
+    Ok(AiotCredentialCreatePayload {
+        credential_type,
+        expires_at,
+    })
+}
+
+fn twin_update_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotTwinUpdatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let desired = parse_twin_update_section(obj, "desired")?;
+    let reported = parse_twin_update_section(obj, "reported")?;
+    if desired.is_empty() && reported.is_empty() {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            "Field desired or reported is required",
+        ));
+    }
+
+    Ok(AiotTwinUpdatePayload { desired, reported })
+}
+
+fn parse_twin_update_section(
+    obj: &JsonMap<String, JsonValue>,
+    field: &str,
+) -> Result<BTreeMap<String, String>, HttpResponse> {
+    let Some(value) = obj.get(field) else {
+        return Ok(BTreeMap::new());
+    };
+    let Some(section) = value.as_object() else {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            &format!("Field {field} must be a JSON object"),
+        ));
+    };
+    Ok(section
+        .iter()
+        .map(|(key, value)| (key.clone(), value.to_string()))
+        .collect())
+}
+
+fn required_json_string_field(
+    obj: &JsonMap<String, JsonValue>,
+    field: &str,
+) -> Result<String, HttpResponse> {
+    let value = obj.get(field).and_then(JsonValue::as_str).ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            &format!("Field {field} must be a non-empty string"),
+        )
+    })?;
+    if value.trim().is_empty() {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            &format!("Field {field} must be a non-empty string"),
+        ));
+    }
+    Ok(value.to_string())
+}
+
+fn required_json_enum_field(
+    obj: &JsonMap<String, JsonValue>,
+    field: &str,
+    allowed_values: &[&str],
+) -> Result<String, HttpResponse> {
+    let value = required_json_string_field(obj, field)?;
+    if allowed_values.contains(&value.as_str()) {
+        return Ok(value);
+    }
+
+    Err(problem_response(
+        HttpStatus::BadRequest,
+        "api.request.invalid_field",
+        &format!(
+            "Field {field} must be one of: {}",
+            allowed_values.join(", ")
+        ),
+    ))
+}
+
+fn required_json_int64_string_field(
+    obj: &JsonMap<String, JsonValue>,
+    field: &str,
+) -> Result<String, HttpResponse> {
+    let value = required_json_string_field(obj, field)?;
+    if !is_valid_int64_string(&value) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_field",
+            &format!("Field {field} must be an int64 string"),
+        ));
+    }
+
+    Ok(value)
+}
+
+fn is_valid_int64_string(value: &str) -> bool {
+    if value.is_empty() || !value.as_bytes().iter().all(u8::is_ascii_digit) {
+        return false;
+    }
+
+    value.parse::<i64>().is_ok()
+}
+
+fn optional_json_string_field(obj: &JsonMap<String, JsonValue>, field: &str) -> Option<String> {
+    obj.get(field)
+        .and_then(JsonValue::as_str)
+        .map(str::to_string)
+}
+
+#[derive(Debug, Clone)]
+struct AiotCommandCreatePayload {
+    capability_name: String,
+    command_name: String,
+    payload_json: String,
+    request_media_resource_id: Option<String>,
+    request_object_blob_id: Option<String>,
+    request_media_json: Option<String>,
+    session_id: Option<String>,
+    trace_id: Option<String>,
+    timeout_at: Option<String>,
+    idempotency_key: Option<String>,
+}
+
+fn command_create_payload_from_request(
+    request: &HttpRequest,
+) -> Result<AiotCommandCreatePayload, HttpResponse> {
+    if request.body.iter().all(|byte| byte.is_ascii_whitespace()) {
+        return Err(problem_response(
+            HttpStatus::BadRequest,
+            "api.request.body.required",
+            "Request body is required",
+        ));
+    }
+
+    let body: JsonValue = serde_json::from_slice(&request.body).map_err(|_| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json",
+            "Request body must be valid JSON",
+        )
+    })?;
+    let obj = body.as_object().ok_or_else(|| {
+        problem_response(
+            HttpStatus::BadRequest,
+            "api.request.invalid_json_object",
+            "Request body must be a JSON object",
+        )
+    })?;
+
+    let capability_name = required_json_string_field(obj, "capabilityName")?;
+    let command_name = required_json_string_field(obj, "commandName")?;
+    let payload_json = obj
+        .get("payload")
+        .map(JsonValue::to_string)
+        .ok_or_else(|| {
+            problem_response(
+                HttpStatus::BadRequest,
+                "api.request.invalid_field",
+                "Field payload is required",
+            )
+        })?;
+
+    let mut request_media_resource_id = optional_json_string_field(obj, "requestMediaResourceId");
+    let mut request_object_blob_id = optional_json_string_field(obj, "requestObjectBlobId");
+    let mut request_media_json = obj.get("requestMedia").map(JsonValue::to_string);
+    if let Some(value) = obj.get("requestMedia") {
+        request_media_json = Some(value.to_string());
+        if let Some(media_id) = value
+            .as_object()
+            .and_then(|media| json_object_string_field(media, "id"))
+        {
+            request_media_resource_id = Some(media_id.to_string());
+        }
+        if let Some(blob_id) = value
+            .as_object()
+            .and_then(|media| json_object_string_field(media, "objectBlobId"))
+        {
+            request_object_blob_id = Some(blob_id.to_string());
+        }
+    }
+
+    let idempotency_key = request
+        .header("idempotency-key")
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .or_else(|| optional_json_string_field(obj, "idempotencyKey"));
+
+    Ok(AiotCommandCreatePayload {
+        capability_name,
+        command_name,
+        payload_json,
+        request_media_resource_id,
+        request_object_blob_id,
+        request_media_json,
+        session_id: optional_json_string_field(obj, "sessionId"),
+        trace_id: optional_json_string_field(obj, "traceId"),
+        timeout_at: optional_json_string_field(obj, "timeoutAt"),
+        idempotency_key,
+    })
+}
+
+fn json_object_string_field<'a>(
+    obj: &'a JsonMap<String, JsonValue>,
+    field: &str,
+) -> Option<&'a str> {
+    obj.get(field).and_then(JsonValue::as_str)
+}
+
+fn standard_command_response(status: HttpStatus, command: &AiotCommandRecord) -> HttpResponse {
+    standard_resource_response(status, command_resource_json(command))
+}
+
+fn standard_command_collection_response(commands: &[AiotCommandRecord]) -> HttpResponse {
+    let items = commands
+        .iter()
+        .map(command_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn command_resource_json(command: &AiotCommandRecord) -> String {
+    let result_json = command
+        .result
+        .as_ref()
+        .map(command_result_json)
+        .unwrap_or_else(|| "null".to_string());
+
+    format!(
+        r#"{{"commandId":"{}","deviceId":"{}","sessionId":{},"capabilityName":"{}","commandName":"{}","requestPayload":{},"requestMediaResourceId":{},"requestObjectBlobId":{},"requestMedia":{},"status":"{}","traceId":{},"timeoutAt":{},"ackAt":{},"resultAt":{},"createdAt":"{}","result":{}}}"#,
+        json_escape(&command.command_id),
+        json_escape(&command.device_id),
+        json_string_or_null(command.session_id.as_deref()),
+        json_escape(&command.capability_name),
+        json_escape(&command.command_name),
+        json_value_or_string(&command.request_payload_json),
+        json_string_or_null(command.request_media_resource_id.as_deref()),
+        json_string_or_null(command.request_object_blob_id.as_deref()),
+        json_raw_or_null(command.request_media_json.as_deref()),
+        json_escape(&command.status),
+        json_string_or_null(command.trace_id.as_deref()),
+        json_string_or_null(command.timeout_at.as_deref()),
+        json_string_or_null(command.ack_at.as_deref()),
+        json_string_or_null(command.result_at.as_deref()),
+        json_escape(&command.created_at),
+        result_json,
+    )
+}
+
+fn command_result_json(result: &sdkwork_aiot_storage::AiotCommandResultRecord) -> String {
+    format!(
+        r#"{{"resultCode":{},"resultPayload":{},"resultMediaResourceId":{},"resultObjectBlobId":{},"resultMedia":{},"occurredAt":{}}}"#,
+        json_string_or_null(result.result_code.as_deref()),
+        json_raw_or_null(result.result_payload_json.as_deref()),
+        json_string_or_null(result.result_media_resource_id.as_deref()),
+        json_string_or_null(result.result_object_blob_id.as_deref()),
+        json_raw_or_null(result.result_media_json.as_deref()),
+        json_string_or_null(result.occurred_at.as_deref()),
+    )
+}
+
+fn standard_event_collection_response(events: &[AiotDeviceEventRecord]) -> HttpResponse {
+    let items = events
+        .iter()
+        .map(event_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn event_resource_json(event: &AiotDeviceEventRecord) -> String {
+    format!(
+        r#"{{"eventId":"{}","eventType":"{}","eventVersion":"{}","deviceId":"{}","protocolId":"{}","adapterId":"{}","messageClass":"{}","semanticType":"{}","transport":"{}","direction":"{}","messageId":{},"correlationId":{},"traceId":{},"payloadHash":{},"mediaResourceId":{},"objectBlobId":{},"media":{},"payload":{},"occurredAt":"{}"}}"#,
+        json_escape(&event.event_id),
+        json_escape(&event.event_type),
+        json_escape(&event.event_version),
+        json_escape(&event.device_id),
+        json_escape(&event.protocol_id),
+        json_escape(&event.adapter_id),
+        json_escape(&event.message_class),
+        json_escape(&event.semantic_type),
+        json_escape(&event.transport),
+        json_escape(&event.direction),
+        json_string_or_null(event.message_id.as_deref()),
+        json_string_or_null(event.correlation_id.as_deref()),
+        json_string_or_null(event.trace_id.as_deref()),
+        json_string_or_null(event.payload_hash.as_deref()),
+        json_string_or_null(event.media_resource_id.as_deref()),
+        json_string_or_null(event.object_blob_id.as_deref()),
+        json_raw_or_null(event.media_json.as_deref()),
+        json_value_or_string(&event.payload_json),
+        json_escape(&event.occurred_at),
+    )
+}
+
+fn standard_twin_response(snapshot: &AiotDeviceTwinSnapshot) -> HttpResponse {
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(
+            r#"{{"code":"0","data":{{"deviceId":"{}","desired":{},"reported":{},"desiredVersion":"{}","reportedVersion":"{}","updatedAt":"{}"}}}}"#,
+            json_escape(&snapshot.device_id),
+            json_map_with_json_values(&snapshot.desired),
+            json_map_with_json_values(&snapshot.reported),
+            snapshot.desired_version,
+            snapshot.reported_version,
+            json_escape(&snapshot.updated_at),
+        ))
+}
+
+fn standard_device_session_collection_response(
+    sessions: &[AiotDeviceSessionRecord],
+) -> HttpResponse {
+    let items = sessions
+        .iter()
+        .map(device_session_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn device_session_resource_json(session: &AiotDeviceSessionRecord) -> String {
+    format!(
+        r#"{{"sessionId":"{}","deviceId":"{}","status":"{}","connectedAt":{},"disconnectedAt":{},"transport":"{}"}}"#,
+        json_escape(&session.session_id),
+        json_escape(&session.device_id),
+        json_escape(&session.status),
+        json_string_or_null(session.connected_at.as_deref()),
+        json_string_or_null(session.disconnected_at.as_deref()),
+        json_escape(&session.transport),
+    )
+}
+
+fn standard_device_capability_collection_response(
+    capabilities: &[AiotDeviceCapabilityRecord],
+) -> HttpResponse {
+    let items = capabilities
+        .iter()
+        .map(device_capability_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn standard_device_credential_response(
+    status: HttpStatus,
+    credential: &AiotDeviceCredentialRecord,
+) -> HttpResponse {
+    standard_resource_response(status, device_credential_resource_json(credential))
+}
+
+fn standard_device_credential_collection_response(
+    credentials: &[AiotDeviceCredentialRecord],
+) -> HttpResponse {
+    let items = credentials
+        .iter()
+        .map(device_credential_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn device_credential_resource_json(credential: &AiotDeviceCredentialRecord) -> String {
+    format!(
+        r#"{{"credentialId":"{}","deviceId":"{}","credentialType":"{}","status":"{}","expiresAt":{},"createdAt":"{}","revokedAt":{}}}"#,
+        json_escape(&credential.credential_id),
+        json_escape(&credential.device_id),
+        json_escape(&credential.credential_type),
+        json_escape(&credential.status),
+        json_string_or_null(credential.expires_at.as_deref()),
+        json_escape(&credential.created_at),
+        json_string_or_null(credential.revoked_at.as_deref()),
+    )
+}
+
+fn device_capability_resource_json(capability: &AiotDeviceCapabilityRecord) -> String {
+    format!(
+        r#"{{"capabilityName":"{}","capabilityKind":"{}","status":"{}"}}"#,
+        json_escape(&capability.capability_name),
+        json_escape(&capability.capability_kind),
+        json_escape(&capability.status),
+    )
+}
+
+fn standard_firmware_artifact_response(
+    status: HttpStatus,
+    artifact: &AiotFirmwareArtifactRecord,
+) -> HttpResponse {
+    standard_resource_response(status, firmware_artifact_resource_json(artifact))
+}
+
+fn standard_firmware_artifact_collection_response(
+    artifacts: &[AiotFirmwareArtifactRecord],
+) -> HttpResponse {
+    let items = artifacts
+        .iter()
+        .map(firmware_artifact_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn firmware_artifact_resource_json(artifact: &AiotFirmwareArtifactRecord) -> String {
+    format!(
+        r#"{{"artifactId":"{}","artifactKey":"{}","version":"{}","mediaResourceId":"{}","resource":{},"objectBlobId":{},"sha256":"{}","signature":{},"targetChipFamily":{},"targetRuntimeProfile":{},"status":"{}"}}"#,
+        json_escape(&artifact.artifact_id),
+        json_escape(&artifact.artifact_key),
+        json_escape(&artifact.version),
+        json_escape(&artifact.media_resource_id),
+        json_value_or_string(&artifact.resource_json),
+        media_resource_object_blob_id(&artifact.resource_json),
+        json_escape(&artifact.sha256),
+        json_string_or_null(artifact.signature.as_deref()),
+        json_string_or_null(artifact.target_chip_family.as_deref()),
+        json_string_or_null(artifact.target_runtime_profile.as_deref()),
+        json_escape(&artifact.status)
+    )
+}
+
+fn standard_firmware_rollout_response(
+    status: HttpStatus,
+    rollout: &AiotFirmwareRolloutRecord,
+) -> HttpResponse {
+    standard_resource_response(status, firmware_rollout_resource_json(rollout))
+}
+
+fn standard_firmware_rollout_collection_response(
+    rollouts: &[AiotFirmwareRolloutRecord],
+) -> HttpResponse {
+    let items = rollouts
+        .iter()
+        .map(firmware_rollout_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn firmware_rollout_resource_json(rollout: &AiotFirmwareRolloutRecord) -> String {
+    format!(
+        r#"{{"rolloutId":"{}","artifactId":"{}","targetPolicy":{},"status":"{}"}}"#,
+        json_escape(&rollout.rollout_id),
+        json_escape(&rollout.artifact_id),
+        json_value_or_string(&rollout.target_policy_json),
+        json_escape(&rollout.status)
+    )
+}
+
+fn standard_resource_response(status: HttpStatus, data_json: String) -> HttpResponse {
+    HttpResponse::new(status)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":{data_json}}}"#))
+}
+
+fn standard_device_response(status: HttpStatus, device: &AiotDeviceRecord) -> HttpResponse {
+    standard_resource_response(
+        status,
+        format!(
+            r#"{{"id":"{}","tenantId":"{}","organizationId":"{}","deviceId":"{}","displayName":"{}","productId":"{}","clientId":{},"chipFamily":{},"status":"{}","metadata":{},"lastSeenAt":"{}"}}"#,
+            json_escape(&device.id),
+            device.tenant_id,
+            device.organization_id,
+            json_escape(&device.device_id),
+            json_escape(&device.display_name),
+            json_escape(&device.product_id),
+            json_string_or_null(device.client_id.as_deref()),
+            json_string_or_null(device.chip_family.as_deref()),
+            json_escape(&device.status),
+            device.metadata_json.as_deref().unwrap_or("null"),
+            json_escape(&device.last_seen_at),
+        ),
+    )
+}
+
+fn standard_device_collection_response(devices: &[AiotDeviceRecord]) -> HttpResponse {
+    let items = devices
+        .iter()
+        .map(device_resource_json)
+        .collect::<Vec<_>>()
+        .join(",");
+    HttpResponse::new(HttpStatus::Ok)
+        .with_header("content-type", "application/json")
+        .with_body(format!(r#"{{"code":"0","data":[{items}]}}"#))
+}
+
+fn device_resource_json(device: &AiotDeviceRecord) -> String {
+    format!(
+        r#"{{"id":"{}","tenantId":"{}","organizationId":"{}","deviceId":"{}","displayName":"{}","productId":"{}","clientId":{},"chipFamily":{},"status":"{}","metadata":{},"lastSeenAt":"{}"}}"#,
+        json_escape(&device.id),
+        device.tenant_id,
+        device.organization_id,
+        json_escape(&device.device_id),
+        json_escape(&device.display_name),
+        json_escape(&device.product_id),
+        json_string_or_null(device.client_id.as_deref()),
+        json_string_or_null(device.chip_family.as_deref()),
+        json_escape(&device.status),
+        device.metadata_json.as_deref().unwrap_or("null"),
+        json_escape(&device.last_seen_at),
+    )
+}
+
+fn hardware_class_name(class: &HardwareClass) -> &'static str {
+    match class {
+        HardwareClass::Unspecified => "unspecified",
+        HardwareClass::Mcu => "mcu",
+        HardwareClass::LinuxSbc => "linux_sbc",
+        HardwareClass::EdgeGateway => "edge_gateway",
+        HardwareClass::IndustrialController => "industrial_controller",
+        HardwareClass::CameraDevice => "camera_device",
+        HardwareClass::AudioDevice => "audio_device",
+        HardwareClass::CellularModule => "cellular_module",
+        HardwareClass::BridgeAdapter => "bridge_adapter",
+    }
+}
+
+fn capability_kind_name(kind: CapabilityKind) -> &'static str {
+    match kind {
+        CapabilityKind::Property => "property",
+        CapabilityKind::Command => "command",
+        CapabilityKind::Event => "event",
+        CapabilityKind::Telemetry => "telemetry",
+        CapabilityKind::Media => "media",
+        CapabilityKind::Ota => "ota",
+    }
+}
+
+fn protocol_scope_name(scope: ProtocolPluginScope) -> &'static str {
+    match scope {
+        ProtocolPluginScope::StandardAdapter => "StandardAdapter",
+        ProtocolPluginScope::CompatibilityPlugin => "CompatibilityPlugin",
+        ProtocolPluginScope::BridgeAdapter => "BridgeAdapter",
+    }
+}
+
+fn capability_bridge_name(bridge: &CapabilityBridge) -> &'static str {
+    match bridge {
+        CapabilityBridge::StandardCapability => "standard_capability",
+        CapabilityBridge::McpJsonRpc => "mcp_jsonrpc",
+        CapabilityBridge::Lwm2mObject => "lwm2m_object",
+        CapabilityBridge::MatterCluster => "matter_cluster",
+        CapabilityBridge::ZigbeeCluster => "zigbee_cluster",
+        CapabilityBridge::LorawanPayloadCodec => "lorawan_payload_codec",
+        CapabilityBridge::RegisterMap => "register_map",
+        CapabilityBridge::OpcUaNode => "opcua_node",
+        CapabilityBridge::MqttTopic => "mqtt_topic",
+        CapabilityBridge::FirmwareOta => "firmware_ota",
+    }
+}
+
+fn json_string_or_null(value: Option<&str>) -> String {
+    value
+        .map(|value| format!(r#""{}""#, json_escape(value)))
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_raw_or_null(value: Option<&str>) -> String {
+    value
+        .map(json_value_or_string)
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_value_or_string(value: &str) -> String {
+    if serde_json::from_str::<JsonValue>(value).is_ok() {
+        value.to_string()
+    } else {
+        format!(r#""{}""#, json_escape(value))
+    }
+}
+
+fn media_resource_object_blob_id(resource_json: &str) -> String {
+    serde_json::from_str::<JsonValue>(resource_json)
+        .ok()
+        .and_then(|value| {
+            value
+                .as_object()
+                .and_then(|obj| json_object_string_field(obj, "objectBlobId"))
+                .map(str::to_string)
+        })
+        .map(|value| format!(r#""{}""#, json_escape(&value)))
+        .unwrap_or_else(|| "null".to_string())
+}
+
+fn json_map_with_json_values(values: &BTreeMap<String, String>) -> String {
+    let items = values
+        .iter()
+        .map(|(key, value)| format!(r#""{}":{}"#, json_escape(key), json_value_or_string(value)))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!("{{{items}}}")
+}
+
+fn device_not_found_response(device_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.device.not_found","deviceId":"{}"}}"#,
+            json_escape(device_id)
+        ))
+}
+
+fn credential_not_found_response(credential_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.device.credential.not_found","credentialId":"{}"}}"#,
+            json_escape(credential_id)
+        ))
+}
+
+fn device_session_not_found_response(session_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.device.session.not_found","sessionId":"{}"}}"#,
+            json_escape(session_id)
+        ))
+}
+
+fn command_not_found_response(command_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.command.not_found","commandId":"{}"}}"#,
+            json_escape(command_id)
+        ))
+}
+
+fn firmware_artifact_not_found_response(artifact_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.firmware.artifact.not_found","artifactId":"{}"}}"#,
+            json_escape(artifact_id)
+        ))
+}
+
+fn firmware_rollout_not_found_response(rollout_id: &str) -> HttpResponse {
+    HttpResponse::new(HttpStatus::NotFound)
+        .with_header("content-type", "application/problem+json")
+        .with_body(format!(
+            r#"{{"type":"about:blank","title":"Not Found","status":404,"code":"api.firmware.rollout.not_found","rolloutId":"{}"}}"#,
+            json_escape(rollout_id)
+        ))
+}
+
+fn apply_media_object_blob_id(
+    resource_json: &str,
+    object_blob_id: &str,
+) -> Result<String, serde_json::Error> {
+    let mut value: JsonValue = serde_json::from_str(resource_json)?;
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "objectBlobId".to_string(),
+            JsonValue::String(object_blob_id.to_string()),
+        );
+    }
+    serde_json::to_string(&value)
 }
 
 fn debug_array<'a, T, I>(values: I) -> String
@@ -530,6 +4832,17 @@ where
 fn string_array<'a, I>(values: I) -> String
 where
     I: IntoIterator<Item = &'a String>,
+{
+    values
+        .into_iter()
+        .map(|value| format!(r#""{}""#, json_escape(value)))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn str_array<'a, I>(values: I) -> String
+where
+    I: IntoIterator<Item = &'a str>,
 {
     values
         .into_iter()
@@ -573,7 +4886,13 @@ fn permission_denied_response(required_permission: &str) -> HttpResponse {
 }
 
 fn parse_http_request(bytes: &[u8]) -> Result<HttpRequest, AiotApiError> {
-    let raw = std::str::from_utf8(bytes).map_err(|_| AiotApiError::new("api.http.invalid_utf8"))?;
+    let header_len = bytes
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|idx| idx + 4)
+        .ok_or_else(|| AiotApiError::new("api.http.incomplete_headers"))?;
+    let raw = std::str::from_utf8(&bytes[..header_len])
+        .map_err(|_| AiotApiError::new("api.http.invalid_utf8"))?;
     let mut lines = raw.split("\r\n");
     let request_line = lines
         .next()
@@ -595,6 +4914,8 @@ fn parse_http_request(bytes: &[u8]) -> Result<HttpRequest, AiotApiError> {
             request = request.with_header(name.trim(), value.trim());
         }
     }
+
+    request.body.extend_from_slice(&bytes[header_len..]);
 
     Ok(request)
 }

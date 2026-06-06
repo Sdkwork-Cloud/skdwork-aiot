@@ -40,6 +40,27 @@ fn protocol_envelope_preserves_reliability_and_trace_identifiers() {
 }
 
 #[test]
+fn protocol_envelope_preserves_media_resource_identity_fields() {
+    let envelope = ProtocolEnvelope::builder("xiaozhi.websocket", MessageClass::MediaFrame)
+        .device("device-001")
+        .semantic_type("audio")
+        .media_resource_id("media-res-001")
+        .object_blob_id("obj-blob-001")
+        .media_resource_snapshot(
+            r#"{"id":"media-res-001","kind":"audio","source":"object_storage"}"#,
+        )
+        .build();
+
+    assert_eq!(envelope.media_resource_id.as_deref(), Some("media-res-001"));
+    assert_eq!(envelope.object_blob_id.as_deref(), Some("obj-blob-001"));
+    assert!(envelope
+        .media_resource_snapshot
+        .as_deref()
+        .unwrap_or_default()
+        .contains(r#""kind":"audio""#));
+}
+
+#[test]
 fn adapter_manifest_declares_protocols_transports_and_capabilities() {
     let manifest = ProtocolAdapterManifest::new("xiaozhi", "0.1.0")
         .with_scope(ProtocolPluginScope::CompatibilityPlugin)

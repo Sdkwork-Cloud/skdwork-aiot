@@ -283,6 +283,9 @@ pub struct ProtocolIngestRecord {
     pub action: ProtocolIngestAction,
     pub pipeline: String,
     pub trace_id: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_resource_snapshot: Option<String>,
 }
 
 impl ProtocolIngestRecord {
@@ -302,6 +305,9 @@ impl ProtocolIngestRecord {
             action,
             pipeline: pipeline.into(),
             trace_id: None,
+            media_resource_id: None,
+            object_blob_id: None,
+            media_resource_snapshot: None,
         }
     }
 
@@ -317,6 +323,18 @@ impl ProtocolIngestRecord {
 
     pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
         self.trace_id = Some(trace_id.into());
+        self
+    }
+
+    pub fn with_media_reference(
+        mut self,
+        media_resource_id: impl Into<String>,
+        object_blob_id: Option<String>,
+        media_resource_snapshot: Option<String>,
+    ) -> Self {
+        self.media_resource_id = Some(media_resource_id.into());
+        self.object_blob_id = object_blob_id;
+        self.media_resource_snapshot = media_resource_snapshot;
         self
     }
 }

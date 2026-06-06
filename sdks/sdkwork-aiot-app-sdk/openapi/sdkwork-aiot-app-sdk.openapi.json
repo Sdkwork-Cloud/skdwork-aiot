@@ -384,7 +384,15 @@
       "AiotDevice": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "tenantId", "organizationId", "deviceId", "displayName", "status"],
+        "required": [
+          "id",
+          "tenantId",
+          "organizationId",
+          "deviceId",
+          "displayName",
+          "productId",
+          "status"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -402,12 +410,190 @@
           "displayName": {
             "type": "string"
           },
+          "productId": {
+            "type": "string",
+            "description": "Product int64 identifier serialized as a string."
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "chipFamily": {
+            "type": "string"
+          },
+          "avatar": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
           "status": {
             "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/JsonValue"
           },
           "lastSeenAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "MediaKind": {
+        "type": "string",
+        "enum": ["image", "video", "audio", "voice", "document", "archive", "model", "other"]
+      },
+      "MediaSource": {
+        "type": "string",
+        "enum": ["object_storage", "external_url", "data_url", "provider_asset", "generated"]
+      },
+      "MediaChecksum": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["algorithm", "value"],
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "enum": ["sha256", "md5", "etag"]
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "MediaAccess": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["visibility"],
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["private", "tenant", "organization", "public", "signed"]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MediaAiProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provenance": {
+            "type": "string",
+            "enum": ["uploaded", "generated", "edited", "imported"]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "promptId": {
+            "type": "string"
+          },
+          "generationTaskId": {
+            "type": "string"
+          },
+          "sourceMediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "seed": {
+            "type": "string"
+          },
+          "moderationStatus": {
+            "type": "string",
+            "enum": ["unknown", "pending", "approved", "rejected", "blocked"]
+          },
+          "safetyLabels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MediaResource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "source"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MediaKind"
+          },
+          "source": {
+            "$ref": "#/components/schemas/MediaSource"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "publicUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "objectBlobId": {
+            "type": "string"
+          },
+          "bucketId": {
+            "type": "string"
+          },
+          "objectKey": {
+            "type": "string"
+          },
+          "objectVersion": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "mimeType": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "sizeBytes": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "checksum": {
+            "$ref": "#/components/schemas/MediaChecksum"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "durationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "altText": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "access": {
+            "$ref": "#/components/schemas/MediaAccess"
+          },
+          "ai": {
+            "$ref": "#/components/schemas/MediaAiProvenance"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -461,6 +647,124 @@
           },
           "payload": {
             "$ref": "#/components/schemas/JsonValue"
+          },
+          "requestMediaResourceId": {
+            "type": "string"
+          },
+          "requestObjectBlobId": {
+            "type": "string"
+          },
+          "requestMedia": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "sessionId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "traceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "timeoutAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Legacy body fallback. Prefer Idempotency-Key request header."
+          }
+        }
+      },
+      "AiotCommandResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "resultPayload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "resultMediaResourceId": {
+            "type": "string"
+          },
+          "resultObjectBlobId": {
+            "type": "string"
+          },
+          "resultMedia": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AiotCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "deviceId",
+          "capabilityName",
+          "commandName",
+          "requestPayload",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "capabilityName": {
+            "type": "string"
+          },
+          "commandName": {
+            "type": "string"
+          },
+          "requestPayload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "requestMediaResourceId": {
+            "type": "string"
+          },
+          "requestObjectBlobId": {
+            "type": "string"
+          },
+          "requestMedia": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "status": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "timeoutAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ackAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resultAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "$ref": "#/components/schemas/AiotCommandResult"
           }
         }
       },
@@ -476,17 +780,7 @@
             "type": "string"
           },
           "data": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["commandId", "status"],
-            "properties": {
-              "commandId": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string"
-              }
-            }
+            "$ref": "#/components/schemas/AiotCommand"
           }
         }
       },
@@ -498,8 +792,93 @@
           "code": {
             "type": "string"
           },
+          "msg": {
+            "type": "string"
+          },
           "data": {
             "$ref": "#/components/schemas/JsonValue"
+          }
+        }
+      },
+      "AiotEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "deviceId",
+          "protocolId",
+          "adapterId",
+          "messageClass",
+          "semanticType",
+          "transport",
+          "direction",
+          "payload",
+          "occurredAt"
+        ],
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "eventVersion": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "deviceId": {
+            "type": "string"
+          },
+          "protocolId": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string"
+          },
+          "messageClass": {
+            "type": "string"
+          },
+          "semanticType": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["device_to_cloud", "cloud_to_device"]
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "payloadHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 128
+          },
+          "mediaResourceId": {
+            "type": "string"
+          },
+          "objectBlobId": {
+            "type": "string"
+          },
+          "media": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -511,10 +890,13 @@
           "code": {
             "type": "string"
           },
+          "msg": {
+            "type": "string"
+          },
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/JsonValue"
+              "$ref": "#/components/schemas/AiotEvent"
             }
           }
         }

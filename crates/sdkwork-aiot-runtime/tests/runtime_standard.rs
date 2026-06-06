@@ -11,6 +11,7 @@ use sdkwork_aiot_runtime::{
     AiotStorageBundle, BackpressureAction, ComponentKind, RuntimeMode, RuntimeServicePlan,
 };
 use sdkwork_aiot_storage::AiotStorageWriteKind;
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone)]
 struct FakeCodec {
@@ -114,6 +115,20 @@ fn runtime_maps_device_protocol_routes_to_protocol_plugins() {
         .iter()
         .any(|route| route.path == "/iot/xiaozhi/activate"
             && route.kind == AiotProtocolRouteKind::Provisioning));
+
+    let mqtt = runtime
+        .protocol_route_for_path("/iot/xiaozhi/mqtt")
+        .expect("mqtt control route");
+    assert_eq!(mqtt.protocol_id, "xiaozhi.mqtt_udp");
+    assert_eq!(mqtt.transport, TransportBinding::Mqtt);
+    assert_eq!(mqtt.kind, AiotProtocolRouteKind::DeviceSession);
+
+    let udp = runtime
+        .protocol_route_for_path("/iot/xiaozhi/udp")
+        .expect("udp media route");
+    assert_eq!(udp.protocol_id, "xiaozhi.mqtt_udp");
+    assert_eq!(udp.transport, TransportBinding::Udp);
+    assert_eq!(udp.kind, AiotProtocolRouteKind::BridgeIngress);
 }
 
 #[test]
@@ -219,6 +234,46 @@ fn runtime_protocol_result_converts_to_core_ingest_plan() {
 }
 
 #[test]
+fn runtime_protocol_result_preserves_media_reference_for_media_frame_ingest() {
+    let runtime = standard_aiot_runtime(RuntimeMode::Embedded).expect("runtime");
+    let envelope = ProtocolEnvelope::builder("xiaozhi.websocket", MessageClass::MediaFrame)
+        .device("device-001")
+        .client("client-abc")
+        .session("session-001")
+        .semantic_type("audio")
+        .media_resource_id("media-res-001")
+        .object_blob_id("obj-blob-001")
+        .media_resource_snapshot(
+            r#"{"id":"media-res-001","kind":"audio","source":"object_storage"}"#,
+        )
+        .build();
+
+    let result = runtime
+        .handle_protocol_envelope(envelope)
+        .expect("runtime result");
+    let record = result.to_core_ingest_record();
+    let plan = result.to_core_ingest_plan();
+    let command = result.to_storage_command();
+
+    assert_eq!(record.action, ProtocolIngestAction::ProcessMediaFrame);
+    assert_eq!(record.media_resource_id.as_deref(), Some("media-res-001"));
+    assert_eq!(record.object_blob_id.as_deref(), Some("obj-blob-001"));
+    assert!(record
+        .media_resource_snapshot
+        .as_deref()
+        .unwrap_or_default()
+        .contains(r#""kind":"audio""#));
+    assert_eq!(plan.primary_table, "iot_device_event");
+    assert_eq!(command.media_resource_id.as_deref(), Some("media-res-001"));
+    assert_eq!(command.object_blob_id.as_deref(), Some("obj-blob-001"));
+    assert!(command
+        .media_resource_snapshot
+        .as_deref()
+        .unwrap_or_default()
+        .contains(r#""source":"object_storage""#));
+}
+
+#[test]
 fn runtime_protocol_result_converts_to_storage_transaction_command() {
     let runtime = standard_aiot_runtime(RuntimeMode::Embedded).expect("runtime");
     let envelope = ProtocolEnvelope::builder("xiaozhi.websocket", MessageClass::Handshake)
@@ -274,6 +329,61 @@ fn runtime_preserves_protocol_reliability_metadata_into_storage_command() {
     assert_eq!(command.correlation_id.as_deref(), Some("corr-001"));
     assert_eq!(command.idempotency_key.as_deref(), Some("idem-001"));
     assert_eq!(command.trace_id.as_deref(), Some("trace-001"));
+}
+
+#[test]
+fn runtime_storage_command_outbox_payload_is_versioned_and_contains_media_identity() {
+    let runtime = standard_aiot_runtime(RuntimeMode::Embedded).expect("runtime");
+    let envelope = ProtocolEnvelope::builder("xiaozhi.websocket", MessageClass::MediaFrame)
+        .device("device-009")
+        .session("session-009")
+        .trace_id("trace-009")
+        .semantic_type("audio")
+        .media_resource_id("media-res-009")
+        .object_blob_id("obj-blob-009")
+        .build();
+
+    let result = runtime
+        .handle_protocol_envelope(envelope)
+        .expect("runtime result");
+    let command = result.to_storage_command();
+    let outbox = command.outbox.as_ref().expect("outbox");
+
+    assert_eq!(outbox.event_version, "1");
+    assert!(outbox.payload_json.contains(r#""eventVersion":"1""#));
+    assert!(outbox
+        .payload_json
+        .contains(r#""messageClass":"mediaFrame""#));
+    assert!(outbox
+        .payload_json
+        .contains(r#""mediaResourceId":"media-res-009""#));
+    assert!(outbox
+        .payload_json
+        .contains(r#""objectBlobId":"obj-blob-009""#));
+}
+
+#[test]
+fn runtime_storage_command_outbox_payload_hash_matches_payload_json_sha256() {
+    let runtime = standard_aiot_runtime(RuntimeMode::Embedded).expect("runtime");
+    let envelope = ProtocolEnvelope::builder("xiaozhi.websocket", MessageClass::Telemetry)
+        .device("device-010")
+        .trace_id("trace-010")
+        .semantic_type("telemetry")
+        .build();
+    let result = runtime
+        .handle_protocol_envelope(envelope)
+        .expect("runtime result");
+    let command = result.to_storage_command();
+    let outbox = command.outbox.as_ref().expect("outbox");
+
+    let expected = {
+        let mut hasher = Sha256::new();
+        hasher.update(outbox.payload_json.as_bytes());
+        let digest = hasher.finalize();
+        format!("{digest:x}")
+    };
+
+    assert_eq!(outbox.payload_hash.as_deref(), Some(expected.as_str()));
 }
 
 #[test]
@@ -572,7 +682,7 @@ fn composable_bundle_types_model_storage_protocol_routes_listeners_and_health() 
     assert_eq!(config.app_api_prefix, "/app/v3/api/iot");
     assert_eq!(config.backend_api_prefix, "/backend/v3/api/iot");
     assert!(config.requires_external_iam_context);
-    assert_eq!(storage.schema_version, "0.1.0");
+    assert_eq!(storage.schema_version, "0.2.0");
     assert!(storage.migrations_required);
     assert!(protocols.protocol_ids.contains(&"xiaozhi.websocket"));
     assert!(protocols.protocol_ids.contains(&"mqtt.v5"));

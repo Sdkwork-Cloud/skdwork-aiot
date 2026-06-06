@@ -14,6 +14,7 @@ use sdkwork_aiot_security::DeviceAuthMode;
 use sdkwork_aiot_storage::{
     AiotOutboxWriteIntent, AiotProtocolStorageCommand, AiotStorageAssociation, AiotStorageWriteKind,
 };
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +134,9 @@ impl AiotRuntime {
             client_id: envelope.client_id,
             session_id: envelope.session_id,
             trace_id: envelope.trace_id,
+            media_resource_id: envelope.media_resource_id,
+            object_blob_id: envelope.object_blob_id,
+            media_resource_snapshot: envelope.media_resource_snapshot,
             should_ack,
         })
     }
@@ -365,6 +369,9 @@ pub struct AiotProtocolMessageResult {
     pub client_id: Option<String>,
     pub session_id: Option<String>,
     pub trace_id: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_resource_snapshot: Option<String>,
     pub should_ack: bool,
 }
 
@@ -394,6 +401,13 @@ impl AiotProtocolMessageResult {
         }
         if let Some(trace_id) = &self.trace_id {
             record = record.with_trace_id(trace_id.clone());
+        }
+        if let Some(media_resource_id) = &self.media_resource_id {
+            record = record.with_media_reference(
+                media_resource_id.clone(),
+                self.object_blob_id.clone(),
+                self.media_resource_snapshot.clone(),
+            );
         }
 
         record
@@ -431,6 +445,13 @@ impl AiotProtocolMessageResult {
         if let Some(trace_id) = &self.trace_id {
             command = command.with_trace_id(trace_id.clone());
         }
+        if let Some(media_resource_id) = &self.media_resource_id {
+            command = command.with_media_reference(
+                media_resource_id.clone(),
+                self.object_blob_id.clone(),
+                self.media_resource_snapshot.clone(),
+            );
+        }
         if ingest_plan.emit_outbox_event {
             let aggregate_type = storage_aggregate_type(self.action);
             let aggregate_id = storage_aggregate_id(
@@ -438,12 +459,17 @@ impl AiotProtocolMessageResult {
                 self.device_id.as_deref(),
                 self.session_id.as_deref(),
             );
-            command = command.with_outbox(AiotOutboxWriteIntent::new(
-                ingest_plan.event_kind.event_type(),
-                aggregate_type,
-                aggregate_id,
-                ingest_plan.outbox_topic,
-            ));
+            command = command.with_outbox(
+                AiotOutboxWriteIntent::new(
+                    ingest_plan.event_kind.event_type(),
+                    aggregate_type,
+                    aggregate_id,
+                    ingest_plan.outbox_topic,
+                )
+                .with_event_version("1")
+                .with_payload_json(self.standard_outbox_payload_json())
+                .with_payload_hash(self.standard_outbox_payload_hash()),
+            );
         }
 
         command
@@ -456,6 +482,25 @@ impl AiotProtocolMessageResult {
         let association = storage_association_from_context(ctx)?;
 
         Ok(self.to_storage_command().with_association(association))
+    }
+
+    fn standard_outbox_payload_json(&self) -> String {
+        format!(
+            r#"{{"eventVersion":"1","protocolId":"{}","pluginId":"{}","deviceId":"{}","sessionId":"{}","messageClass":"{}","semanticType":"{}","traceId":"{}","mediaResourceId":"{}","objectBlobId":"{}"}}"#,
+            json_escape(&self.protocol_id),
+            json_escape(&self.plugin_id),
+            json_escape(&self.device_id.clone().unwrap_or_default()),
+            json_escape(&self.session_id.clone().unwrap_or_default()),
+            message_class_name(self.message_class),
+            json_escape(&self.semantic_type),
+            json_escape(&self.trace_id.clone().unwrap_or_default()),
+            json_escape(&self.media_resource_id.clone().unwrap_or_default()),
+            json_escape(&self.object_blob_id.clone().unwrap_or_default()),
+        )
+    }
+
+    fn standard_outbox_payload_hash(&self) -> String {
+        sha256_hex(&self.standard_outbox_payload_json())
     }
 }
 
@@ -584,6 +629,42 @@ fn storage_aggregate_id(
         "device_session" => session_id.or(device_id).unwrap_or_default().to_string(),
         _ => device_id.or(session_id).unwrap_or_default().to_string(),
     }
+}
+
+fn message_class_name(class: MessageClass) -> &'static str {
+    match class {
+        MessageClass::Handshake => "handshake",
+        MessageClass::Auth => "auth",
+        MessageClass::Heartbeat => "heartbeat",
+        MessageClass::Disconnect => "disconnect",
+        MessageClass::Provisioning => "provisioning",
+        MessageClass::Telemetry => "telemetry",
+        MessageClass::Event => "event",
+        MessageClass::PropertyReport => "propertyReport",
+        MessageClass::PropertySet => "propertySet",
+        MessageClass::TwinDesired => "twinDesired",
+        MessageClass::TwinReported => "twinReported",
+        MessageClass::CommandRequest => "commandRequest",
+        MessageClass::CommandAck => "commandAck",
+        MessageClass::CommandResult => "commandResult",
+        MessageClass::MediaFrame => "mediaFrame",
+        MessageClass::OtaCheck => "otaCheck",
+        MessageClass::OtaDeploy => "otaDeploy",
+        MessageClass::GatewayTopology => "gatewayTopology",
+        MessageClass::SecurityEvent => "securityEvent",
+        MessageClass::Diagnostic => "diagnostic",
+    }
+}
+
+fn json_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn sha256_hex(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    let digest = hasher.finalize();
+    format!("{digest:x}")
 }
 
 fn protocol_message_action(
@@ -840,7 +921,7 @@ impl AiotStorageBundle {
     pub fn standard_sqlx() -> Self {
         Self {
             component_name: "sdkwork-aiot-storage-sqlx",
-            schema_version: "0.1.0",
+            schema_version: "0.2.0",
             migrations_required: true,
             repository_ports: vec![
                 "ProductRepository",
@@ -956,14 +1037,23 @@ impl RuntimeServicePlan {
                 "/backend/v3/api/iot/products",
                 "/backend/v3/api/iot/hardware_profiles",
                 "/backend/v3/api/iot/protocol_profiles",
-                "/backend/v3/api/iot/capability_models",
+                "/backend/v3/api/iot/capability_models/{capabilityModelId}",
                 "/backend/v3/api/iot/devices",
+                "/backend/v3/api/iot/devices/{deviceId}",
+                "/backend/v3/api/iot/devices/{deviceId}/credentials",
+                "/backend/v3/api/iot/devices/{deviceId}/sessions",
+                "/backend/v3/api/iot/devices/{deviceId}/capabilities",
+                "/backend/v3/api/iot/devices/{deviceId}/commands",
+                "/backend/v3/api/iot/devices/{deviceId}/twin",
                 "/backend/v3/api/iot/firmware_artifacts",
                 "/backend/v3/api/iot/firmware_rollouts",
+                "/backend/v3/api/iot/events",
                 "/backend/v3/api/iot/protocol_adapters",
+                "/backend/v3/api/iot/runtime/capacity",
             ],
             app_routes: vec![
                 "/app/v3/api/iot/devices",
+                "/app/v3/api/iot/devices/{deviceId}",
                 "/app/v3/api/iot/devices/{deviceId}/commands",
                 "/app/v3/api/iot/devices/{deviceId}/twin",
                 "/app/v3/api/iot/devices/{deviceId}/events",
@@ -989,6 +1079,7 @@ pub fn standard_aiot_runtime(mode: RuntimeMode) -> Result<AiotRuntime, RuntimeBu
         .with_protocol("xiaozhi.websocket")
         .with_protocol("xiaozhi.mqtt_udp")
         .with_transport(TransportBinding::WebSocket)
+        .with_transport(TransportBinding::Http)
         .with_transport(TransportBinding::Mqtt)
         .with_transport(TransportBinding::Udp)
         .with_codec(CodecKind::JsonText)
@@ -1074,6 +1165,26 @@ pub fn standard_aiot_runtime(mode: RuntimeMode) -> Result<AiotRuntime, RuntimeBu
                 AiotProtocolRouteKind::Provisioning,
             )
             .with_capability_bridge("device_provisioning"),
+        )
+        .register_protocol_route(
+            AiotProtocolRoute::new(
+                "/iot/xiaozhi/mqtt",
+                "xiaozhi.mqtt_udp",
+                "xiaozhi",
+                TransportBinding::Mqtt,
+                AiotProtocolRouteKind::DeviceSession,
+            )
+            .with_capability_bridge("mcp_jsonrpc"),
+        )
+        .register_protocol_route(
+            AiotProtocolRoute::new(
+                "/iot/xiaozhi/udp",
+                "xiaozhi.mqtt_udp",
+                "xiaozhi",
+                TransportBinding::Udp,
+                AiotProtocolRouteKind::BridgeIngress,
+            )
+            .with_capability_bridge("media_ingest"),
         )
         .build()
 }

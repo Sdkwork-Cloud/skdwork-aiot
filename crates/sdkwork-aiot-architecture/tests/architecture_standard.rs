@@ -367,6 +367,85 @@ fn openapi_operation_permissions_match_http_api_route_contracts() {
 }
 
 #[test]
+fn backend_openapi_uses_media_resource_contract_for_firmware_artifact_io() {
+    let root = workspace_root();
+    let backend_openapi = fs::read_to_string(
+        root.join("sdks/sdkwork-aiot-backend-sdk/openapi/sdkwork-aiot-backend-sdk.openapi.json"),
+    )
+    .expect("backend openapi");
+
+    assert!(backend_openapi.contains(r#""AiotFirmwareArtifactCreateRequest""#));
+    assert!(backend_openapi.contains(r#""resource": {"#));
+    assert!(backend_openapi.contains(r##""$ref": "#/components/schemas/MediaResource""##));
+    assert!(backend_openapi.contains(r#""MediaKind""#));
+    assert!(backend_openapi.contains(r#""MediaSource""#));
+    assert!(backend_openapi.contains(r#""MediaAccess""#));
+    assert!(backend_openapi.contains(r#""MediaChecksum""#));
+    assert!(
+        !backend_openapi.contains(r#""storageUri""#),
+        "firmware artifact MediaResource contract must not expose bare storageUri fields"
+    );
+}
+
+#[test]
+fn event_openapi_contracts_use_typed_event_payload_and_media_resource_fields() {
+    let root = workspace_root();
+    let app_openapi = fs::read_to_string(
+        root.join("sdks/sdkwork-aiot-app-sdk/openapi/sdkwork-aiot-app-sdk.openapi.json"),
+    )
+    .expect("app openapi");
+    let backend_openapi = fs::read_to_string(
+        root.join("sdks/sdkwork-aiot-backend-sdk/openapi/sdkwork-aiot-backend-sdk.openapi.json"),
+    )
+    .expect("backend openapi");
+
+    assert!(app_openapi.contains(r#""AiotEventListResponse""#));
+    assert!(app_openapi.contains(r#""AiotEvent""#));
+    assert!(app_openapi.contains(r##""$ref": "#/components/schemas/AiotEvent""##));
+    assert!(app_openapi.contains(r##""$ref": "#/components/schemas/MediaResource""##));
+    assert!(!app_openapi.contains(r#""eventImageUrl""#));
+    assert!(!app_openapi.contains(r#""eventAudioUrl""#));
+
+    assert!(backend_openapi.contains(r#""AiotEventListResponse""#));
+    assert!(backend_openapi.contains(r#""AiotEvent""#));
+    assert!(backend_openapi.contains(r##""$ref": "#/components/schemas/AiotEventListResponse""##));
+    assert!(backend_openapi.contains(r##""$ref": "#/components/schemas/MediaResource""##));
+    assert!(!backend_openapi.contains(r#""eventImageUrl""#));
+    assert!(!backend_openapi.contains(r#""eventAudioUrl""#));
+}
+
+#[test]
+fn command_openapi_contracts_use_media_resource_for_request_and_result_payloads() {
+    let root = workspace_root();
+    let app_openapi = fs::read_to_string(
+        root.join("sdks/sdkwork-aiot-app-sdk/openapi/sdkwork-aiot-app-sdk.openapi.json"),
+    )
+    .expect("app openapi");
+    let backend_openapi = fs::read_to_string(
+        root.join("sdks/sdkwork-aiot-backend-sdk/openapi/sdkwork-aiot-backend-sdk.openapi.json"),
+    )
+    .expect("backend openapi");
+
+    assert!(app_openapi.contains(r#""AiotCommandCreateRequest""#));
+    assert!(app_openapi.contains(r#""AiotCommandResponse""#));
+    assert!(app_openapi.contains(r#""AiotCommandResult""#));
+    assert!(app_openapi.contains(r#""requestMediaResourceId""#));
+    assert!(app_openapi.contains(r#""resultMediaResourceId""#));
+    assert!(app_openapi.contains(r##""$ref": "#/components/schemas/MediaResource""##));
+    assert!(!app_openapi.contains(r#""requestAudioUrl""#));
+    assert!(!app_openapi.contains(r#""resultAudioUrl""#));
+
+    assert!(backend_openapi.contains(r#""AiotCommandListResponse""#));
+    assert!(backend_openapi.contains(r#""AiotCommand""#));
+    assert!(backend_openapi.contains(r#""AiotCommandResult""#));
+    assert!(backend_openapi.contains(r#""requestMediaResourceId""#));
+    assert!(backend_openapi.contains(r#""resultMediaResourceId""#));
+    assert!(backend_openapi.contains(r##""$ref": "#/components/schemas/MediaResource""##));
+    assert!(!backend_openapi.contains(r#""requestAudioUrl""#));
+    assert!(!backend_openapi.contains(r#""resultAudioUrl""#));
+}
+
+#[test]
 fn declared_http_collection_routes_are_mounted_by_shared_api_component() {
     let http_api =
         fs::read_to_string(workspace_root().join("crates/sdkwork-aiot-http-api/src/lib.rs"))

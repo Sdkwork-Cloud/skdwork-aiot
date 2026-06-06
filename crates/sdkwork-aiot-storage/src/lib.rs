@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +105,8 @@ pub const IOT_TABLES: &[AiotTable] = &[
     AiotTable::new("iot_telemetry_event", "telemetry_event"),
     AiotTable::new("iot_device_event", "telemetry_event"),
     AiotTable::new("iot_security_event", "telemetry_event"),
+    AiotTable::new("iot_media_resource", "media_resource"),
+    AiotTable::new("iot_device_media", "media_resource"),
     AiotTable::new("iot_firmware_artifact", "ota_provisioning"),
     AiotTable::new("iot_firmware_rollout", "ota_provisioning"),
     AiotTable::new("iot_firmware_rollout_target", "ota_provisioning"),
@@ -120,6 +122,7 @@ pub const IOT_TABLES: &[AiotTable] = &[
 
 pub fn standard_protocol_ingest_storage_ports() -> Vec<&'static str> {
     vec![
+        "DeviceRepository",
         "DeviceSessionRepository",
         "DeviceOnlineLeaseRepository",
         "DeviceCredentialRepository",
@@ -135,6 +138,1028 @@ pub fn standard_protocol_ingest_storage_ports() -> Vec<&'static str> {
         "ProtocolDeadLetterRepository",
         "OutboxEventRepository",
     ]
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotDeviceRecord {
+    pub id: String,
+    pub tenant_id: i64,
+    pub organization_id: i64,
+    pub device_id: String,
+    pub display_name: String,
+    pub product_id: String,
+    pub client_id: Option<String>,
+    pub chip_family: Option<String>,
+    pub status: String,
+    pub metadata_json: Option<String>,
+    pub last_seen_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotDeviceCreateCommand {
+    pub association: AiotStorageAssociation,
+    pub device_id: String,
+    pub display_name: String,
+    pub product_id: String,
+    pub client_id: Option<String>,
+    pub chip_family: Option<String>,
+}
+
+impl AiotDeviceCreateCommand {
+    pub fn new(
+        association: AiotStorageAssociation,
+        device_id: impl Into<String>,
+        display_name: impl Into<String>,
+        product_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            association,
+            device_id: device_id.into(),
+            display_name: display_name.into(),
+            product_id: product_id.into(),
+            client_id: None,
+            chip_family: None,
+        }
+    }
+
+    pub fn with_client_id(mut self, client_id: impl Into<String>) -> Self {
+        self.client_id = Some(client_id.into());
+        self
+    }
+
+    pub fn with_chip_family(mut self, chip_family: impl Into<String>) -> Self {
+        self.chip_family = Some(chip_family.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotDeviceUpdateCommand {
+    pub association: AiotStorageAssociation,
+    pub device_id: String,
+    pub display_name: Option<String>,
+    pub status: Option<String>,
+    pub metadata_json: Option<String>,
+}
+
+impl AiotDeviceUpdateCommand {
+    pub fn new(association: AiotStorageAssociation, device_id: impl Into<String>) -> Self {
+        Self {
+            association,
+            device_id: device_id.into(),
+            display_name: None,
+            status: None,
+            metadata_json: None,
+        }
+    }
+
+    pub fn with_display_name(mut self, display_name: impl Into<String>) -> Self {
+        self.display_name = Some(display_name.into());
+        self
+    }
+
+    pub fn with_status(mut self, status: impl Into<String>) -> Self {
+        self.status = Some(status.into());
+        self
+    }
+
+    pub fn with_metadata_json(mut self, metadata_json: impl Into<String>) -> Self {
+        self.metadata_json = Some(metadata_json.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AiotDeviceRepositoryError {
+    DuplicateDeviceId,
+    InvalidProductId,
+    NotFound,
+    PersistenceFailure,
+}
+
+pub trait AiotDeviceRepository: Send + Sync {
+    fn create_device(
+        &self,
+        command: AiotDeviceCreateCommand,
+    ) -> Result<AiotDeviceRecord, AiotDeviceRepositoryError>;
+    fn get_device(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Option<AiotDeviceRecord>;
+    fn list_devices(&self, association: &AiotStorageAssociation) -> Vec<AiotDeviceRecord>;
+    fn update_device(
+        &self,
+        command: AiotDeviceUpdateCommand,
+    ) -> Result<AiotDeviceRecord, AiotDeviceRepositoryError>;
+    fn delete_device(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Result<(), AiotDeviceRepositoryError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotCommandResultRecord {
+    pub result_code: Option<String>,
+    pub result_payload_json: Option<String>,
+    pub result_media_resource_id: Option<String>,
+    pub result_object_blob_id: Option<String>,
+    pub result_media_json: Option<String>,
+    pub occurred_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotCommandRecord {
+    pub id: String,
+    pub tenant_id: i64,
+    pub organization_id: i64,
+    pub command_id: String,
+    pub device_id: String,
+    pub session_id: Option<String>,
+    pub capability_name: String,
+    pub command_name: String,
+    pub request_payload_json: String,
+    pub request_media_resource_id: Option<String>,
+    pub request_object_blob_id: Option<String>,
+    pub request_media_json: Option<String>,
+    pub status: String,
+    pub trace_id: Option<String>,
+    pub timeout_at: Option<String>,
+    pub ack_at: Option<String>,
+    pub result_at: Option<String>,
+    pub created_at: String,
+    pub result: Option<AiotCommandResultRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotCommandCreateCommand {
+    pub association: AiotStorageAssociation,
+    pub command_id: Option<String>,
+    pub device_id: String,
+    pub session_id: Option<String>,
+    pub capability_name: String,
+    pub command_name: String,
+    pub request_payload_json: String,
+    pub request_media_resource_id: Option<String>,
+    pub request_object_blob_id: Option<String>,
+    pub request_media_json: Option<String>,
+    pub status: String,
+    pub trace_id: Option<String>,
+    pub timeout_at: Option<String>,
+    pub idempotency_key: Option<String>,
+}
+
+impl AiotCommandCreateCommand {
+    pub fn new(
+        association: AiotStorageAssociation,
+        device_id: impl Into<String>,
+        capability_name: impl Into<String>,
+        command_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            association,
+            command_id: None,
+            device_id: device_id.into(),
+            session_id: None,
+            capability_name: capability_name.into(),
+            command_name: command_name.into(),
+            request_payload_json: "{}".to_string(),
+            request_media_resource_id: None,
+            request_object_blob_id: None,
+            request_media_json: None,
+            status: "accepted".to_string(),
+            trace_id: None,
+            timeout_at: None,
+            idempotency_key: None,
+        }
+    }
+
+    pub fn with_command_id(mut self, command_id: impl Into<String>) -> Self {
+        self.command_id = Some(command_id.into());
+        self
+    }
+
+    pub fn with_session_id(mut self, session_id: impl Into<String>) -> Self {
+        self.session_id = Some(session_id.into());
+        self
+    }
+
+    pub fn with_request_payload_json(mut self, request_payload_json: impl Into<String>) -> Self {
+        self.request_payload_json = request_payload_json.into();
+        self
+    }
+
+    pub fn with_request_media(
+        mut self,
+        request_media_resource_id: Option<String>,
+        request_object_blob_id: Option<String>,
+        request_media_json: Option<String>,
+    ) -> Self {
+        self.request_media_resource_id = request_media_resource_id;
+        self.request_object_blob_id = request_object_blob_id;
+        self.request_media_json = request_media_json;
+        self
+    }
+
+    pub fn with_status(mut self, status: impl Into<String>) -> Self {
+        self.status = status.into();
+        self
+    }
+
+    pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
+        self.trace_id = Some(trace_id.into());
+        self
+    }
+
+    pub fn with_timeout_at(mut self, timeout_at: impl Into<String>) -> Self {
+        self.timeout_at = Some(timeout_at.into());
+        self
+    }
+
+    pub fn with_idempotency_key(mut self, idempotency_key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(idempotency_key.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AiotCommandRepositoryError {
+    DuplicateCommandId,
+    PersistenceFailure,
+}
+
+pub trait AiotCommandRepository: Send + Sync {
+    fn create_command(
+        &self,
+        command: AiotCommandCreateCommand,
+    ) -> Result<AiotCommandRecord, AiotCommandRepositoryError>;
+    fn list_commands(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Result<Vec<AiotCommandRecord>, AiotCommandRepositoryError>;
+    fn cancel_command(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        command_id: &str,
+    ) -> Result<Option<AiotCommandRecord>, AiotCommandRepositoryError>;
+}
+
+pub trait AiotDeviceSessionRepository: Send + Sync {
+    fn disconnect_session(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        session_id: &str,
+    ) -> Result<bool, AiotDeviceRepositoryError>;
+    fn is_session_disconnected(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        session_id: &str,
+    ) -> Result<bool, AiotDeviceRepositoryError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotDeviceEventRecord {
+    pub id: String,
+    pub tenant_id: i64,
+    pub organization_id: i64,
+    pub event_id: String,
+    pub event_type: String,
+    pub event_version: String,
+    pub device_id: String,
+    pub protocol_id: String,
+    pub adapter_id: String,
+    pub message_class: String,
+    pub semantic_type: String,
+    pub transport: String,
+    pub direction: String,
+    pub message_id: Option<String>,
+    pub correlation_id: Option<String>,
+    pub trace_id: Option<String>,
+    pub payload_hash: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_json: Option<String>,
+    pub payload_json: String,
+    pub occurred_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotDeviceEventCreateCommand {
+    pub association: AiotStorageAssociation,
+    pub event_id: Option<String>,
+    pub event_type: String,
+    pub event_version: String,
+    pub device_id: String,
+    pub protocol_id: String,
+    pub adapter_id: String,
+    pub message_class: String,
+    pub semantic_type: String,
+    pub transport: String,
+    pub direction: String,
+    pub message_id: Option<String>,
+    pub correlation_id: Option<String>,
+    pub trace_id: Option<String>,
+    pub payload_hash: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_json: Option<String>,
+    pub payload_json: String,
+    pub occurred_at: String,
+}
+
+impl AiotDeviceEventCreateCommand {
+    pub fn new(
+        association: AiotStorageAssociation,
+        device_id: impl Into<String>,
+        event_type: impl Into<String>,
+    ) -> Self {
+        Self {
+            association,
+            event_id: None,
+            event_type: event_type.into(),
+            event_version: "1".to_string(),
+            device_id: device_id.into(),
+            protocol_id: "xiaozhi.websocket".to_string(),
+            adapter_id: "xiaozhi".to_string(),
+            message_class: "mediaFrame".to_string(),
+            semantic_type: "audio".to_string(),
+            transport: "websocket".to_string(),
+            direction: "device_to_cloud".to_string(),
+            message_id: None,
+            correlation_id: None,
+            trace_id: None,
+            payload_hash: None,
+            media_resource_id: None,
+            object_blob_id: None,
+            media_json: None,
+            payload_json: "{}".to_string(),
+            occurred_at: default_timestamp().to_string(),
+        }
+    }
+
+    pub fn with_event_id(mut self, event_id: impl Into<String>) -> Self {
+        self.event_id = Some(event_id.into());
+        self
+    }
+
+    pub fn with_event_version(mut self, event_version: impl Into<String>) -> Self {
+        self.event_version = event_version.into();
+        self
+    }
+
+    pub fn with_protocol(
+        mut self,
+        protocol_id: impl Into<String>,
+        adapter_id: impl Into<String>,
+    ) -> Self {
+        self.protocol_id = protocol_id.into();
+        self.adapter_id = adapter_id.into();
+        self
+    }
+
+    pub fn with_message_routing(
+        mut self,
+        message_class: impl Into<String>,
+        semantic_type: impl Into<String>,
+        transport: impl Into<String>,
+        direction: impl Into<String>,
+    ) -> Self {
+        self.message_class = message_class.into();
+        self.semantic_type = semantic_type.into();
+        self.transport = transport.into();
+        self.direction = direction.into();
+        self
+    }
+
+    pub fn with_message_id(mut self, message_id: impl Into<String>) -> Self {
+        self.message_id = Some(message_id.into());
+        self
+    }
+
+    pub fn with_correlation_id(mut self, correlation_id: impl Into<String>) -> Self {
+        self.correlation_id = Some(correlation_id.into());
+        self
+    }
+
+    pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
+        self.trace_id = Some(trace_id.into());
+        self
+    }
+
+    pub fn with_payload_hash(mut self, payload_hash: impl Into<String>) -> Self {
+        self.payload_hash = Some(payload_hash.into());
+        self
+    }
+
+    pub fn with_media(
+        mut self,
+        media_resource_id: Option<String>,
+        object_blob_id: Option<String>,
+        media_json: Option<String>,
+    ) -> Self {
+        self.media_resource_id = media_resource_id;
+        self.object_blob_id = object_blob_id;
+        self.media_json = media_json;
+        self
+    }
+
+    pub fn with_payload_json(mut self, payload_json: impl Into<String>) -> Self {
+        self.payload_json = payload_json.into();
+        self
+    }
+
+    pub fn with_occurred_at(mut self, occurred_at: impl Into<String>) -> Self {
+        self.occurred_at = occurred_at.into();
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AiotEventRepositoryError {
+    PersistenceFailure,
+}
+
+pub trait AiotEventRepository: Send + Sync {
+    fn record_event(
+        &self,
+        command: AiotDeviceEventCreateCommand,
+    ) -> Result<AiotDeviceEventRecord, AiotEventRepositoryError>;
+    fn list_events(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: Option<&str>,
+    ) -> Result<Vec<AiotDeviceEventRecord>, AiotEventRepositoryError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotTwinPropertyUpsertCommand {
+    pub association: AiotStorageAssociation,
+    pub device_id: String,
+    pub property_name: String,
+    pub desired_value_json: Option<String>,
+    pub reported_value_json: Option<String>,
+    pub desired_updated_at: Option<String>,
+    pub reported_updated_at: Option<String>,
+}
+
+impl AiotTwinPropertyUpsertCommand {
+    pub fn new(
+        association: AiotStorageAssociation,
+        device_id: impl Into<String>,
+        property_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            association,
+            device_id: device_id.into(),
+            property_name: property_name.into(),
+            desired_value_json: None,
+            reported_value_json: None,
+            desired_updated_at: None,
+            reported_updated_at: None,
+        }
+    }
+
+    pub fn with_desired_value_json(mut self, desired_value_json: impl Into<String>) -> Self {
+        self.desired_value_json = Some(desired_value_json.into());
+        self
+    }
+
+    pub fn with_reported_value_json(mut self, reported_value_json: impl Into<String>) -> Self {
+        self.reported_value_json = Some(reported_value_json.into());
+        self
+    }
+
+    pub fn with_desired_updated_at(mut self, desired_updated_at: impl Into<String>) -> Self {
+        self.desired_updated_at = Some(desired_updated_at.into());
+        self
+    }
+
+    pub fn with_reported_updated_at(mut self, reported_updated_at: impl Into<String>) -> Self {
+        self.reported_updated_at = Some(reported_updated_at.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiotDeviceTwinSnapshot {
+    pub tenant_id: i64,
+    pub organization_id: i64,
+    pub device_id: String,
+    pub desired: BTreeMap<String, String>,
+    pub reported: BTreeMap<String, String>,
+    pub desired_version: i64,
+    pub reported_version: i64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AiotDeviceTwinRepositoryError {
+    PersistenceFailure,
+}
+
+pub trait AiotDeviceTwinRepository: Send + Sync {
+    fn upsert_twin_property(
+        &self,
+        command: AiotTwinPropertyUpsertCommand,
+    ) -> Result<AiotDeviceTwinSnapshot, AiotDeviceTwinRepositoryError>;
+    fn get_twin_snapshot(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Result<AiotDeviceTwinSnapshot, AiotDeviceTwinRepositoryError>;
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotDeviceRepositoryState {
+    next_device_pk: u64,
+    devices: BTreeMap<String, AiotDeviceRecord>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotDeviceRepository {
+    state: Arc<Mutex<InMemoryAiotDeviceRepositoryState>>,
+}
+
+impl InMemoryAiotDeviceRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl AiotDeviceRepository for InMemoryAiotDeviceRepository {
+    fn create_device(
+        &self,
+        command: AiotDeviceCreateCommand,
+    ) -> Result<AiotDeviceRecord, AiotDeviceRepositoryError> {
+        if !is_valid_int64_string(&command.product_id) {
+            return Err(AiotDeviceRepositoryError::InvalidProductId);
+        }
+
+        let mut state = self.state.lock().expect("in-memory device repo poisoned");
+        let key = scoped_device_key(&command.association, &command.device_id);
+        if state.devices.contains_key(&key) {
+            return Err(AiotDeviceRepositoryError::DuplicateDeviceId);
+        }
+
+        let id = (state.next_device_pk + 1).to_string();
+        state.next_device_pk += 1;
+        let record = AiotDeviceRecord {
+            id,
+            tenant_id: command.association.tenant_id,
+            organization_id: command.association.organization_id,
+            device_id: command.device_id,
+            display_name: command.display_name,
+            product_id: command.product_id,
+            client_id: command.client_id,
+            chip_family: command.chip_family,
+            status: "active".to_string(),
+            metadata_json: None,
+            last_seen_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        state.devices.insert(key, record.clone());
+        Ok(record)
+    }
+
+    fn get_device(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Option<AiotDeviceRecord> {
+        self.state
+            .lock()
+            .expect("in-memory device repo poisoned")
+            .devices
+            .get(&scoped_device_key(association, device_id))
+            .cloned()
+    }
+
+    fn list_devices(&self, association: &AiotStorageAssociation) -> Vec<AiotDeviceRecord> {
+        self.state
+            .lock()
+            .expect("in-memory device repo poisoned")
+            .devices
+            .values()
+            .filter(|device| {
+                device.tenant_id == association.tenant_id
+                    && device.organization_id == association.organization_id
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn update_device(
+        &self,
+        command: AiotDeviceUpdateCommand,
+    ) -> Result<AiotDeviceRecord, AiotDeviceRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory device repo poisoned");
+        let key = scoped_device_key(&command.association, &command.device_id);
+        let Some(device) = state.devices.get_mut(&key) else {
+            return Err(AiotDeviceRepositoryError::NotFound);
+        };
+        if let Some(display_name) = command.display_name {
+            device.display_name = display_name;
+        }
+        if let Some(status) = command.status {
+            device.status = status;
+        }
+        if command.metadata_json.is_some() {
+            device.metadata_json = command.metadata_json;
+        }
+        Ok(device.clone())
+    }
+
+    fn delete_device(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Result<(), AiotDeviceRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory device repo poisoned");
+        let key = scoped_device_key(association, device_id);
+        if state.devices.remove(&key).is_some() {
+            Ok(())
+        } else {
+            Err(AiotDeviceRepositoryError::NotFound)
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotCommandRepositoryState {
+    next_command_pk: u64,
+    commands: BTreeMap<String, AiotCommandRecord>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotCommandRepository {
+    state: Arc<Mutex<InMemoryAiotCommandRepositoryState>>,
+}
+
+impl InMemoryAiotCommandRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl AiotCommandRepository for InMemoryAiotCommandRepository {
+    fn create_command(
+        &self,
+        command: AiotCommandCreateCommand,
+    ) -> Result<AiotCommandRecord, AiotCommandRepositoryError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("in-memory aiot command repo poisoned");
+
+        let command_id = command.command_id.unwrap_or_else(|| {
+            format!(
+                "cmd-{}-{:04}",
+                command.device_id,
+                state.next_command_pk.saturating_add(1)
+            )
+        });
+        let scoped_key = scoped_command_key(&command.association, &command_id);
+        if state.commands.contains_key(&scoped_key) {
+            return Err(AiotCommandRepositoryError::DuplicateCommandId);
+        }
+
+        let id = state.next_command_pk.saturating_add(1).to_string();
+        state.next_command_pk = state.next_command_pk.saturating_add(1);
+
+        let record = AiotCommandRecord {
+            id,
+            tenant_id: command.association.tenant_id,
+            organization_id: command.association.organization_id,
+            command_id,
+            device_id: command.device_id,
+            session_id: command.session_id,
+            capability_name: command.capability_name,
+            command_name: command.command_name,
+            request_payload_json: command.request_payload_json,
+            request_media_resource_id: command.request_media_resource_id,
+            request_object_blob_id: command.request_object_blob_id,
+            request_media_json: command.request_media_json,
+            status: command.status,
+            trace_id: command.trace_id,
+            timeout_at: command.timeout_at,
+            ack_at: None,
+            result_at: None,
+            created_at: default_timestamp().to_string(),
+            result: None,
+        };
+        state.commands.insert(scoped_key, record.clone());
+        Ok(record)
+    }
+
+    fn list_commands(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Result<Vec<AiotCommandRecord>, AiotCommandRepositoryError> {
+        let mut commands = self
+            .state
+            .lock()
+            .expect("in-memory aiot command repo poisoned")
+            .commands
+            .values()
+            .filter(|record| {
+                record.tenant_id == association.tenant_id
+                    && record.organization_id == association.organization_id
+                    && record.device_id == device_id
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        commands.sort_by(|left, right| left.id.cmp(&right.id));
+        Ok(commands)
+    }
+
+    fn cancel_command(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        command_id: &str,
+    ) -> Result<Option<AiotCommandRecord>, AiotCommandRepositoryError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("in-memory aiot command repo poisoned");
+        let key = scoped_command_key(association, command_id);
+        let Some(record) = state.commands.get_mut(&key) else {
+            return Ok(None);
+        };
+        if record.device_id != device_id {
+            return Ok(None);
+        }
+        record.status = "cancelled".to_string();
+        Ok(Some(record.clone()))
+    }
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotDeviceSessionRepositoryState {
+    disconnected_sessions: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotDeviceSessionRepository {
+    state: Arc<Mutex<InMemoryAiotDeviceSessionRepositoryState>>,
+}
+
+impl InMemoryAiotDeviceSessionRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl AiotDeviceSessionRepository for InMemoryAiotDeviceSessionRepository {
+    fn disconnect_session(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        session_id: &str,
+    ) -> Result<bool, AiotDeviceRepositoryError> {
+        let mut state = self.state.lock().expect("in-memory session repo poisoned");
+        let inserted = state
+            .disconnected_sessions
+            .insert(
+                scoped_device_session_key(association, device_id, session_id),
+                default_timestamp().to_string(),
+            )
+            .is_none();
+        Ok(inserted)
+    }
+
+    fn is_session_disconnected(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+        session_id: &str,
+    ) -> Result<bool, AiotDeviceRepositoryError> {
+        Ok(self
+            .state
+            .lock()
+            .expect("in-memory session repo poisoned")
+            .disconnected_sessions
+            .contains_key(&scoped_device_session_key(
+                association,
+                device_id,
+                session_id,
+            )))
+    }
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotEventRepositoryState {
+    next_event_pk: u64,
+    events: Vec<AiotDeviceEventRecord>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotEventRepository {
+    state: Arc<Mutex<InMemoryAiotEventRepositoryState>>,
+}
+
+impl InMemoryAiotEventRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl AiotEventRepository for InMemoryAiotEventRepository {
+    fn record_event(
+        &self,
+        command: AiotDeviceEventCreateCommand,
+    ) -> Result<AiotDeviceEventRecord, AiotEventRepositoryError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("in-memory aiot event repo poisoned");
+        let next_event_pk = state.next_event_pk.saturating_add(1);
+        let event_id = command
+            .event_id
+            .unwrap_or_else(|| format!("evt-{}-{:04}", command.device_id, next_event_pk));
+
+        let record = AiotDeviceEventRecord {
+            id: next_event_pk.to_string(),
+            tenant_id: command.association.tenant_id,
+            organization_id: command.association.organization_id,
+            event_id,
+            event_type: command.event_type,
+            event_version: command.event_version,
+            device_id: command.device_id,
+            protocol_id: command.protocol_id,
+            adapter_id: command.adapter_id,
+            message_class: command.message_class,
+            semantic_type: command.semantic_type,
+            transport: command.transport,
+            direction: command.direction,
+            message_id: command.message_id,
+            correlation_id: command.correlation_id,
+            trace_id: command.trace_id,
+            payload_hash: command.payload_hash,
+            media_resource_id: command.media_resource_id,
+            object_blob_id: command.object_blob_id,
+            media_json: command.media_json,
+            payload_json: command.payload_json,
+            occurred_at: command.occurred_at,
+        };
+        state.next_event_pk = next_event_pk;
+        state.events.push(record.clone());
+        Ok(record)
+    }
+
+    fn list_events(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: Option<&str>,
+    ) -> Result<Vec<AiotDeviceEventRecord>, AiotEventRepositoryError> {
+        let mut events = self
+            .state
+            .lock()
+            .expect("in-memory aiot event repo poisoned")
+            .events
+            .iter()
+            .filter(|record| {
+                record.tenant_id == association.tenant_id
+                    && record.organization_id == association.organization_id
+                    && device_id
+                        .map(|scoped_device_id| scoped_device_id == record.device_id)
+                        .unwrap_or(true)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        events.sort_by(|left, right| left.id.cmp(&right.id));
+        Ok(events)
+    }
+}
+
+#[derive(Debug, Default)]
+struct InMemoryAiotTwinRepositoryState {
+    twins: BTreeMap<String, AiotDeviceTwinSnapshot>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryAiotDeviceTwinRepository {
+    state: Arc<Mutex<InMemoryAiotTwinRepositoryState>>,
+}
+
+impl InMemoryAiotDeviceTwinRepository {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl AiotDeviceTwinRepository for InMemoryAiotDeviceTwinRepository {
+    fn upsert_twin_property(
+        &self,
+        command: AiotTwinPropertyUpsertCommand,
+    ) -> Result<AiotDeviceTwinSnapshot, AiotDeviceTwinRepositoryError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("in-memory aiot twin repo poisoned");
+        let key = scoped_device_key(&command.association, &command.device_id);
+        let snapshot = state
+            .twins
+            .entry(key)
+            .or_insert_with(|| empty_twin_snapshot(&command.association, &command.device_id));
+
+        if let Some(desired) = command.desired_value_json {
+            snapshot
+                .desired
+                .insert(command.property_name.clone(), desired);
+            snapshot.desired_version = snapshot.desired_version.saturating_add(1);
+        }
+
+        if let Some(reported) = command.reported_value_json {
+            snapshot
+                .reported
+                .insert(command.property_name.clone(), reported);
+            snapshot.reported_version = snapshot.reported_version.saturating_add(1);
+        }
+
+        let desired_updated_at = command
+            .desired_updated_at
+            .or(command.reported_updated_at)
+            .unwrap_or_else(|| default_timestamp().to_string());
+        snapshot.updated_at = desired_updated_at;
+
+        Ok(snapshot.clone())
+    }
+
+    fn get_twin_snapshot(
+        &self,
+        association: &AiotStorageAssociation,
+        device_id: &str,
+    ) -> Result<AiotDeviceTwinSnapshot, AiotDeviceTwinRepositoryError> {
+        let state = self
+            .state
+            .lock()
+            .expect("in-memory aiot twin repo poisoned");
+        let key = scoped_device_key(association, device_id);
+        Ok(state
+            .twins
+            .get(&key)
+            .cloned()
+            .unwrap_or_else(|| empty_twin_snapshot(association, device_id)))
+    }
+}
+
+fn scoped_device_key(association: &AiotStorageAssociation, device_id: &str) -> String {
+    format!(
+        "{}:{}:{}",
+        association.tenant_id, association.organization_id, device_id
+    )
+}
+
+fn scoped_command_key(association: &AiotStorageAssociation, command_id: &str) -> String {
+    format!(
+        "{}:{}:{}",
+        association.tenant_id, association.organization_id, command_id
+    )
+}
+
+fn scoped_device_session_key(
+    association: &AiotStorageAssociation,
+    device_id: &str,
+    session_id: &str,
+) -> String {
+    format!(
+        "{}:{}:{}:{}",
+        association.tenant_id, association.organization_id, device_id, session_id
+    )
+}
+
+fn empty_twin_snapshot(
+    association: &AiotStorageAssociation,
+    device_id: &str,
+) -> AiotDeviceTwinSnapshot {
+    AiotDeviceTwinSnapshot {
+        tenant_id: association.tenant_id,
+        organization_id: association.organization_id,
+        device_id: device_id.to_string(),
+        desired: BTreeMap::new(),
+        reported: BTreeMap::new(),
+        desired_version: 0,
+        reported_version: 0,
+        updated_at: default_timestamp().to_string(),
+    }
+}
+
+fn default_timestamp() -> &'static str {
+    "2026-06-01T00:00:00Z"
+}
+
+fn is_valid_int64_string(value: &str) -> bool {
+    if value.is_empty() || !value.as_bytes().iter().all(u8::is_ascii_digit) {
+        return false;
+    }
+
+    value.parse::<i64>().is_ok()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -229,6 +1254,9 @@ pub struct AiotOutboxWriteIntent {
     pub aggregate_type: String,
     pub aggregate_id: String,
     pub topic: String,
+    pub event_version: String,
+    pub payload_json: String,
+    pub payload_hash: Option<String>,
     pub initial_status: &'static str,
 }
 
@@ -244,8 +1272,26 @@ impl AiotOutboxWriteIntent {
             aggregate_type: aggregate_type.into(),
             aggregate_id: aggregate_id.into(),
             topic: topic.into(),
+            event_version: "1".to_string(),
+            payload_json: "{}".to_string(),
+            payload_hash: None,
             initial_status: "pending",
         }
+    }
+
+    pub fn with_event_version(mut self, event_version: impl Into<String>) -> Self {
+        self.event_version = event_version.into();
+        self
+    }
+
+    pub fn with_payload_json(mut self, payload_json: impl Into<String>) -> Self {
+        self.payload_json = payload_json.into();
+        self
+    }
+
+    pub fn with_payload_hash(mut self, payload_hash: impl Into<String>) -> Self {
+        self.payload_hash = Some(payload_hash.into());
+        self
     }
 }
 
@@ -335,6 +1381,9 @@ pub struct AiotProtocolStorageCommand {
     pub correlation_id: Option<String>,
     pub session_id: Option<String>,
     pub trace_id: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_resource_snapshot: Option<String>,
     pub idempotency_key: Option<String>,
     pub requires_transaction: bool,
     pub dead_letter_on_failure: bool,
@@ -372,6 +1421,9 @@ impl AiotProtocolStorageCommand {
             correlation_id: None,
             session_id: None,
             trace_id: None,
+            media_resource_id: None,
+            object_blob_id: None,
+            media_resource_snapshot: None,
             idempotency_key,
             requires_transaction: true,
             dead_letter_on_failure: true,
@@ -401,6 +1453,18 @@ impl AiotProtocolStorageCommand {
 
     pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
         self.trace_id = Some(trace_id.into());
+        self
+    }
+
+    pub fn with_media_reference(
+        mut self,
+        media_resource_id: impl Into<String>,
+        object_blob_id: Option<String>,
+        media_resource_snapshot: Option<String>,
+    ) -> Self {
+        self.media_resource_id = Some(media_resource_id.into());
+        self.object_blob_id = object_blob_id;
+        self.media_resource_snapshot = media_resource_snapshot;
         self
     }
 
@@ -465,15 +1529,21 @@ pub struct AiotPrimaryWriteRecord {
     pub message_id: Option<String>,
     pub correlation_id: Option<String>,
     pub trace_id: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_resource_snapshot: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AiotOutboxEventRecord {
     pub association: AiotStorageAssociation,
     pub event_type: String,
+    pub event_version: String,
     pub aggregate_type: String,
     pub aggregate_id: String,
     pub topic: String,
+    pub payload_json: String,
+    pub payload_hash: Option<String>,
     pub initial_status: &'static str,
 }
 
@@ -550,15 +1620,21 @@ impl AiotProtocolIngestUnitOfWork for InMemoryProtocolIngestUnitOfWork {
             message_id: command.message_id.clone(),
             correlation_id: command.correlation_id.clone(),
             trace_id: command.trace_id.clone(),
+            media_resource_id: command.media_resource_id.clone(),
+            object_blob_id: command.object_blob_id.clone(),
+            media_resource_snapshot: command.media_resource_snapshot.clone(),
         });
 
         if let Some(outbox) = &command.outbox {
             state.snapshot.outbox_events.push(AiotOutboxEventRecord {
                 association: command.association.clone(),
                 event_type: outbox.event_type.clone(),
+                event_version: outbox.event_version.clone(),
                 aggregate_type: outbox.aggregate_type.clone(),
                 aggregate_id: outbox.aggregate_id.clone(),
                 topic: outbox.topic.clone(),
+                payload_json: outbox.payload_json.clone(),
+                payload_hash: outbox.payload_hash.clone(),
                 initial_status: outbox.initial_status,
             });
         }
@@ -602,6 +1678,7 @@ pub struct AiotProtocolDeadLetterIntent {
     pub device_id: Option<String>,
     pub reason_code: String,
     pub payload_ref: Option<String>,
+    pub payload_hash: Option<String>,
     pub raw_payload: Option<String>,
     pub trace_id: Option<String>,
 }
@@ -620,6 +1697,7 @@ impl AiotProtocolDeadLetterIntent {
             device_id: None,
             reason_code: reason_code.into(),
             payload_ref: Some(payload_ref.into()),
+            payload_hash: None,
             raw_payload: None,
             trace_id: None,
         }
@@ -646,6 +1724,11 @@ impl AiotProtocolDeadLetterIntent {
 
     pub fn with_trace_id(mut self, trace_id: impl Into<String>) -> Self {
         self.trace_id = Some(trace_id.into());
+        self
+    }
+
+    pub fn with_payload_hash(mut self, payload_hash: impl Into<String>) -> Self {
+        self.payload_hash = Some(payload_hash.into());
         self
     }
 }
@@ -890,6 +1973,9 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
                 .with_column("device_id")
                 .with_column("capability_name")
                 .with_column("command_name")
+                .with_column("request_media_resource_id")
+                .with_column("request_object_blob_id")
+                .with_column("request_media_resource_snapshot")
                 .with_column("idempotency_key")
                 .with_column("trace_id")
                 .with_index("idx_iot_command_tenant_device_status_created")
@@ -915,6 +2001,9 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
             )
             .with_column("command_id")
             .with_column("result_payload")
+            .with_column("result_media_resource_id")
+            .with_column("result_object_blob_id")
+            .with_column("result_media_resource_snapshot")
             .with_column("result_code")
             .with_index("idx_iot_command_result_tenant_command"),
         ),
@@ -972,6 +2061,8 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
             .with_column("device_id")
             .with_column("event_type")
             .with_column("event_payload")
+            .with_column("media_resource_id")
+            .with_column("media_resource_snapshot")
             .with_index("idx_iot_device_event_tenant_device_time"),
         ),
         "iot_security_event" => Some(
@@ -986,16 +2077,51 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
             .with_column("actor_id")
             .with_index("idx_iot_security_event_tenant_time"),
         ),
+        "iot_media_resource" => Some(
+            AiotTableContract::new(
+                "iot_media_resource",
+                "media_resource",
+                TableProfile::TenantOwnerEntity,
+            )
+            .with_column("owner_type")
+            .with_column("owner_id")
+            .with_column("media_resource_id")
+            .with_column("kind")
+            .with_column("source")
+            .with_column("object_blob_id")
+            .with_column("resource_snapshot")
+            .with_index("uk_iot_media_resource_tenant_resource_id")
+            .with_index("idx_iot_media_resource_tenant_owner")
+            .with_index("idx_iot_media_resource_tenant_object_blob"),
+        ),
+        "iot_device_media" => Some(
+            AiotTableContract::new(
+                "iot_device_media",
+                "media_resource",
+                TableProfile::RelationEntity,
+            )
+            .with_column("owner_type")
+            .with_column("owner_id")
+            .with_column("media_role")
+            .with_column("media_resource_id")
+            .with_column("object_blob_id")
+            .with_column("resource_snapshot")
+            .with_column("sort_order")
+            .with_index("idx_iot_device_media_tenant_owner_role")
+            .with_index("idx_iot_device_media_tenant_media"),
+        ),
         "iot_firmware_artifact" => Some(
             AiotTableContract::new(
                 "iot_firmware_artifact",
                 "ota_provisioning",
                 TableProfile::TenantOwnerEntity,
             )
-            .with_column("artifact_key")
+            .with_column("media_resource_id")
+            .with_column("object_blob_id")
+            .with_column("media_resource_snapshot")
             .with_column("sha256")
             .with_column("signature")
-            .with_index("uk_iot_firmware_artifact_tenant_key"),
+            .with_index("uk_iot_firmware_artifact_tenant_media_resource"),
         ),
         "iot_firmware_rollout" => Some(
             AiotTableContract::new(
@@ -1057,9 +2183,11 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
             AiotTableContract::new("iot_outbox_event", "eventing", TableProfile::OutboxEvent)
                 .with_column("event_id")
                 .with_column("event_type")
+                .with_column("event_version")
                 .with_column("aggregate_type")
                 .with_column("aggregate_id")
                 .with_column("payload")
+                .with_column("payload_hash")
                 .with_column("next_attempt_at")
                 .with_column("attempt_count")
                 .with_column("trace_id")
@@ -1070,6 +2198,9 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
                 .with_column("source_system")
                 .with_column("message_id")
                 .with_column("consumer_name")
+                .with_column("payload_hash")
+                .with_column("error_message")
+                .with_column("processed_at")
                 .with_index("uk_iot_inbox_event_consumer_message"),
         ),
         "iot_audit_log" => Some(
@@ -1092,6 +2223,9 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
             .with_column("device_id")
             .with_column("message_id")
             .with_column("correlation_id")
+            .with_column("media_resource_id")
+            .with_column("object_blob_id")
+            .with_column("media_resource_snapshot")
             .with_column("idempotency_key")
             .with_column("trace_id")
             .with_index("uk_iot_protocol_ingest_tenant_idempotency")
@@ -1108,6 +2242,7 @@ pub fn table_contract(name: &str) -> Option<AiotTableContract> {
             .with_column("adapter_id")
             .with_column("reason_code")
             .with_column("payload_ref")
+            .with_column("payload_hash")
             .with_index("idx_iot_protocol_dead_letter_tenant_created"),
         ),
         _ => None,

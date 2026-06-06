@@ -13,6 +13,7 @@ members = [
     "crates/sdkwork-aiot-http-api",
     "crates/sdkwork-aiot-architecture",
     "services/sdkwork-aiot-gateway",
+    "services/sdkwork-aiot-xiaozhi-simulator-ui",
     "services/sdkwork-aiot-admin-api",
     "services/sdkwork-aiot-app-api",
 ]

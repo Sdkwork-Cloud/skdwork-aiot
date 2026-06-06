@@ -207,6 +207,9 @@
               }
             }
           },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
@@ -257,6 +260,169 @@
             "$ref": "#/components/responses/Problem"
           }
         }
+      },
+      "post": {
+        "tags": ["iot"],
+        "operationId": "devices.create",
+        "x-sdkwork-required-permission": "iot.devices.write",
+        "summary": "Create AIoT device",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotDeviceCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Device created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.retrieve",
+        "x-sdkwork-required-permission": "iot.devices.read",
+        "summary": "Retrieve AIoT device",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Device resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "devices.update",
+        "x-sdkwork-required-permission": "iot.devices.write",
+        "summary": "Update AIoT device",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotDeviceUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Device updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "devices.delete",
+        "x-sdkwork-required-permission": "iot.devices.delete",
+        "summary": "Delete AIoT device",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Device deleted."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
       }
     },
     "/backend/v3/api/iot/devices/{deviceId}/credentials": {
@@ -277,6 +443,38 @@
           "$ref": "#/components/parameters/SdkworkPermissionScope"
         }
       ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.credentials.list",
+        "x-sdkwork-required-permission": "iot.devices.read",
+        "summary": "List device credentials",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardCollectionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
       "post": {
         "tags": ["iot"],
         "operationId": "devices.credentials.create",
@@ -323,6 +521,435 @@
         }
       }
     },
+    "/backend/v3/api/iot/devices/{deviceId}/credentials/{credentialId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.credentials.retrieve",
+        "x-sdkwork-required-permission": "iot.devices.read",
+        "summary": "Retrieve device credential",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/CredentialId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "devices.credentials.delete",
+        "x-sdkwork-required-permission": "iot.devices.write",
+        "summary": "Revoke device credential",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/CredentialId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Credential revoked."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}/sessions": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.sessions.list",
+        "x-sdkwork-required-permission": "iot.sessions.read",
+        "summary": "List device sessions",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardCollectionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}/sessions/{sessionId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "devices.sessions.disconnect",
+        "x-sdkwork-required-permission": "iot.sessions.disconnect",
+        "summary": "Disconnect device session",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session disconnected."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}/capabilities": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.capabilities.list",
+        "x-sdkwork-required-permission": "iot.devices.read",
+        "summary": "List device capabilities",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Capability collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardCollectionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}/commands": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.commands.list",
+        "x-sdkwork-required-permission": "iot.commands.read",
+        "summary": "List device commands",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Command collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotCommandListResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}/commands/{commandId}/cancel": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "post": {
+        "tags": ["iot"],
+        "operationId": "devices.commands.cancel",
+        "x-sdkwork-required-permission": "iot.commands.cancel",
+        "summary": "Cancel device command",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/CommandId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled command resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/devices/{deviceId}/twin": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "patch": {
+        "tags": ["iot"],
+        "operationId": "devices.twin.update",
+        "x-sdkwork-required-permission": "iot.twins.write",
+        "summary": "Update backend device twin",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotTwinUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Twin resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "get": {
+        "tags": ["iot"],
+        "operationId": "devices.twin.retrieve",
+        "x-sdkwork-required-permission": "iot.twins.read",
+        "summary": "Retrieve backend device twin",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Twin resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResourceResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/backend/v3/api/iot/firmware_artifacts": {
       "parameters": [
         {
@@ -341,6 +968,33 @@
           "$ref": "#/components/parameters/SdkworkPermissionScope"
         }
       ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "firmwareArtifacts.list",
+        "x-sdkwork-required-permission": "iot.firmware.read",
+        "summary": "List firmware artifacts",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Firmware artifact collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardCollectionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
       "post": {
         "tags": ["iot"],
         "operationId": "firmwareArtifacts.create",
@@ -384,6 +1038,124 @@
         }
       }
     },
+    "/backend/v3/api/iot/firmware_artifacts/{artifactId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "firmwareArtifacts.retrieve",
+        "x-sdkwork-required-permission": "iot.firmware.read",
+        "summary": "Retrieve firmware artifact",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ArtifactId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Firmware artifact.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotFirmwareArtifactResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "firmwareArtifacts.update",
+        "x-sdkwork-required-permission": "iot.firmware.write",
+        "summary": "Update firmware artifact metadata",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ArtifactId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotFirmwareArtifactUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated firmware artifact.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotFirmwareArtifactResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "firmwareArtifacts.delete",
+        "x-sdkwork-required-permission": "iot.firmware.write",
+        "summary": "Delete firmware artifact metadata",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ArtifactId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Firmware artifact deleted."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/backend/v3/api/iot/firmware_rollouts": {
       "parameters": [
         {
@@ -402,6 +1174,33 @@
           "$ref": "#/components/parameters/SdkworkPermissionScope"
         }
       ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "firmwareRollouts.list",
+        "x-sdkwork-required-permission": "iot.firmware.read",
+        "summary": "List firmware rollouts",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Firmware rollout collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardCollectionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
       "post": {
         "tags": ["iot"],
         "operationId": "firmwareRollouts.create",
@@ -435,6 +1234,170 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AiotFirmwareRolloutResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/firmware_rollouts/{rolloutId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "firmwareRollouts.retrieve",
+        "x-sdkwork-required-permission": "iot.firmware.read",
+        "summary": "Retrieve firmware rollout",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RolloutId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Firmware rollout.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotFirmwareRolloutResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "tags": ["iot"],
+        "operationId": "firmwareRollouts.update",
+        "x-sdkwork-required-permission": "iot.firmware.rollout",
+        "summary": "Update firmware rollout",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RolloutId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiotFirmwareRolloutUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated firmware rollout.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotFirmwareRolloutResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["iot"],
+        "operationId": "firmwareRollouts.delete",
+        "x-sdkwork-required-permission": "iot.firmware.rollout",
+        "summary": "Delete firmware rollout",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RolloutId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Firmware rollout deleted."
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/backend/v3/api/iot/events": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SdkworkTenantId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkOrganizationId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkUserId"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkDataScope"
+        },
+        {
+          "$ref": "#/components/parameters/SdkworkPermissionScope"
+        }
+      ],
+      "get": {
+        "tags": ["iot"],
+        "operationId": "events.list",
+        "x-sdkwork-required-permission": "iot.telemetry.read",
+        "summary": "List platform IoT events",
+        "security": [
+          {
+            "Authorization": [],
+            "Access-Token": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiotEventListResponse"
                 }
               }
             }
@@ -614,6 +1577,56 @@
           "maxLength": 128
         }
       },
+      "ArtifactId": {
+        "name": "artifactId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "RolloutId": {
+        "name": "rolloutId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "CredentialId": {
+        "name": "credentialId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "SessionId": {
+        "name": "sessionId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "CommandId": {
+        "name": "commandId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
@@ -653,6 +1666,52 @@
       "AiotDeviceListResponse": {
         "$ref": "#/components/schemas/StandardCollectionResponse"
       },
+      "AiotDeviceCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["deviceId", "displayName", "productId"],
+        "properties": {
+          "deviceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "productId": {
+            "type": "string",
+            "maxLength": 19,
+            "pattern": "^[0-9]+$",
+            "description": "int64-as-string product identifier."
+          },
+          "clientId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "chipFamily": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "AiotDeviceUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/JsonValue"
+          }
+        }
+      },
       "AiotCredentialCreateRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -668,13 +1727,142 @@
           }
         }
       },
+      "AiotTwinUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "desired": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          },
+          "reported": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            }
+          }
+        }
+      },
       "AiotCredentialResponse": {
         "$ref": "#/components/schemas/StandardResourceResponse"
+      },
+      "AiotCommandResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "resultCode": {
+            "type": "string"
+          },
+          "resultPayload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "resultMediaResourceId": {
+            "type": "string"
+          },
+          "resultObjectBlobId": {
+            "type": "string"
+          },
+          "resultMedia": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AiotCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "commandId",
+          "deviceId",
+          "capabilityName",
+          "commandName",
+          "requestPayload",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "capabilityName": {
+            "type": "string"
+          },
+          "commandName": {
+            "type": "string"
+          },
+          "requestPayload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "requestMediaResourceId": {
+            "type": "string"
+          },
+          "requestObjectBlobId": {
+            "type": "string"
+          },
+          "requestMedia": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "status": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "timeoutAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ackAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resultAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "$ref": "#/components/schemas/AiotCommandResult"
+          }
+        }
+      },
+      "AiotCommandListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "data"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiotCommand"
+            }
+          }
+        }
       },
       "AiotFirmwareArtifactCreateRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["artifactKey", "version", "fileName", "storageUri", "sha256"],
+        "required": ["artifactKey", "version", "resource", "sha256"],
         "properties": {
           "artifactKey": {
             "type": "string",
@@ -684,13 +1872,8 @@
             "type": "string",
             "maxLength": 128
           },
-          "fileName": {
-            "type": "string",
-            "maxLength": 256
-          },
-          "storageUri": {
-            "type": "string",
-            "maxLength": 512
+          "resource": {
+            "$ref": "#/components/schemas/MediaResource"
           },
           "sha256": {
             "type": "string",
@@ -699,11 +1882,125 @@
           },
           "signature": {
             "type": "string"
+          },
+          "targetChipFamily": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "targetRuntimeProfile": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
+      "AiotFirmwareArtifactUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "artifactKey": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "resource": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "mediaResourceId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "objectBlobId": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "sha256": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 128
+          },
+          "signature": {
+            "type": "string"
+          },
+          "targetChipFamily": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "targetRuntimeProfile": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
           }
         }
       },
       "AiotFirmwareArtifactResponse": {
-        "$ref": "#/components/schemas/StandardResourceResponse"
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "data"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AiotFirmwareArtifact"
+          }
+        }
+      },
+      "AiotFirmwareArtifact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifactId",
+          "artifactKey",
+          "version",
+          "resource",
+          "mediaResourceId",
+          "sha256",
+          "status"
+        ],
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "artifactKey": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "mediaResourceId": {
+            "type": "string"
+          },
+          "objectBlobId": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "targetChipFamily": {
+            "type": "string"
+          },
+          "targetRuntimeProfile": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
       },
       "AiotFirmwareRolloutCreateRequest": {
         "type": "object",
@@ -718,8 +2015,284 @@
           }
         }
       },
+      "AiotFirmwareRolloutUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "targetPolicy": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      },
       "AiotFirmwareRolloutResponse": {
         "$ref": "#/components/schemas/StandardResourceResponse"
+      },
+      "AiotEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eventId",
+          "eventType",
+          "eventVersion",
+          "deviceId",
+          "protocolId",
+          "adapterId",
+          "messageClass",
+          "semanticType",
+          "transport",
+          "direction",
+          "payload",
+          "occurredAt"
+        ],
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "eventVersion": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "deviceId": {
+            "type": "string"
+          },
+          "protocolId": {
+            "type": "string"
+          },
+          "adapterId": {
+            "type": "string"
+          },
+          "messageClass": {
+            "type": "string"
+          },
+          "semanticType": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["device_to_cloud", "cloud_to_device"]
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          },
+          "traceId": {
+            "type": "string"
+          },
+          "payloadHash": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 128
+          },
+          "mediaResourceId": {
+            "type": "string"
+          },
+          "objectBlobId": {
+            "type": "string"
+          },
+          "media": {
+            "$ref": "#/components/schemas/MediaResource"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AiotEventListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "data"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "msg": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AiotEvent"
+            }
+          }
+        }
+      },
+      "MediaKind": {
+        "type": "string",
+        "enum": ["image", "video", "audio", "voice", "document", "archive", "model", "other"]
+      },
+      "MediaSource": {
+        "type": "string",
+        "enum": ["object_storage", "external_url", "data_url", "provider_asset", "generated"]
+      },
+      "MediaChecksum": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["algorithm", "value"],
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "enum": ["sha256", "md5", "etag"]
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "MediaAccess": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["visibility"],
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": ["private", "tenant", "organization", "public", "signed"]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MediaAiProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provenance": {
+            "type": "string",
+            "enum": ["uploaded", "generated", "edited", "imported"]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "promptId": {
+            "type": "string"
+          },
+          "generationTaskId": {
+            "type": "string"
+          },
+          "sourceMediaIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "seed": {
+            "type": "string"
+          },
+          "moderationStatus": {
+            "type": "string",
+            "enum": ["unknown", "pending", "approved", "rejected", "blocked"]
+          },
+          "safetyLabels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MediaResource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "source"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MediaKind"
+          },
+          "source": {
+            "$ref": "#/components/schemas/MediaSource"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "publicUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "objectBlobId": {
+            "type": "string"
+          },
+          "bucketId": {
+            "type": "string"
+          },
+          "objectKey": {
+            "type": "string"
+          },
+          "objectVersion": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "mimeType": {
+            "type": "string",
+            "maxLength": 256
+          },
+          "sizeBytes": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "checksum": {
+            "$ref": "#/components/schemas/MediaChecksum"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "durationSeconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "altText": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "access": {
+            "$ref": "#/components/schemas/MediaAccess"
+          },
+          "ai": {
+            "$ref": "#/components/schemas/MediaAiProvenance"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
       },
       "AiotProtocolAdapterListResponse": {
         "type": "object",

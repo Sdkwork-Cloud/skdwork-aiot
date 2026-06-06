@@ -145,6 +145,9 @@ pub struct ProtocolEnvelope {
     pub correlation_id: Option<String>,
     pub idempotency_key: Option<String>,
     pub trace_id: Option<String>,
+    pub media_resource_id: Option<String>,
+    pub object_blob_id: Option<String>,
+    pub media_resource_snapshot: Option<String>,
     pub extensions: BTreeMap<String, String>,
 }
 
@@ -178,6 +181,9 @@ impl ProtocolEnvelope {
                 correlation_id: None,
                 idempotency_key: None,
                 trace_id: None,
+                media_resource_id: None,
+                object_blob_id: None,
+                media_resource_snapshot: None,
                 extensions: BTreeMap::new(),
             },
         }
@@ -242,6 +248,21 @@ impl ProtocolEnvelopeBuilder {
 
     pub fn trace_id(mut self, trace_id: impl Into<String>) -> Self {
         self.envelope.trace_id = Some(trace_id.into());
+        self
+    }
+
+    pub fn media_resource_id(mut self, media_resource_id: impl Into<String>) -> Self {
+        self.envelope.media_resource_id = Some(media_resource_id.into());
+        self
+    }
+
+    pub fn object_blob_id(mut self, object_blob_id: impl Into<String>) -> Self {
+        self.envelope.object_blob_id = Some(object_blob_id.into());
+        self
+    }
+
+    pub fn media_resource_snapshot(mut self, media_resource_snapshot: impl Into<String>) -> Self {
+        self.envelope.media_resource_snapshot = Some(media_resource_snapshot.into());
         self
     }
 

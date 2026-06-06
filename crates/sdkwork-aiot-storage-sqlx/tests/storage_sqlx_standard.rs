@@ -1,25 +1,420 @@
 use sdkwork_aiot_storage::{table_contract, IOT_TABLES};
 use sdkwork_aiot_storage::{
-    AiotOutboxWriteIntent, AiotProtocolDeadLetterIntent, AiotProtocolIngestUnitOfWork,
-    AiotProtocolStorageCommand, AiotStorageAssociation, AiotStorageWriteKind,
+    AiotCommandCreateCommand, AiotCommandRepository, AiotDeviceCreateCommand,
+    AiotDeviceEventCreateCommand, AiotDeviceRepository, AiotDeviceRepositoryError,
+    AiotDeviceSessionRepository, AiotDeviceTwinRepository, AiotDeviceUpdateCommand,
+    AiotEventRepository, AiotOutboxWriteIntent, AiotProtocolDeadLetterIntent,
+    AiotProtocolIngestUnitOfWork, AiotProtocolStorageCommand, AiotStorageAssociation,
+    AiotStorageWriteKind, AiotTwinPropertyUpsertCommand,
 };
 use sdkwork_aiot_storage_sqlx::{
     initial_migration_sql, migration_catalog, schema_version, InMemorySqlStatementExecutor,
-    SqlBindValue, SqlDialect, SqlProtocolIngestPlanner, SqlStatementBatch, SqlStatementExecutor,
-    SqlStatementPlan, SqlTransactionFailurePolicy, SqlTransactionOutcome, SqlTransactionPlan,
-    SqlxProtocolIngestUnitOfWork,
+    InMemorySqlxDeviceRepository, SqlBindValue, SqlDeviceWriteOperation, SqlDialect,
+    SqlProtocolIngestPlanner, SqlStatementBatch, SqlStatementExecutor, SqlStatementPlan,
+    SqlTransactionFailurePolicy, SqlTransactionOutcome, SqlTransactionPlan,
+    SqliteSqlxDeviceRepository, SqlxProtocolIngestUnitOfWork,
 };
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[test]
+fn sqlx_device_repository_tracks_create_update_delete_writes() {
+    let repo = InMemorySqlxDeviceRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    let created = repo
+        .create_device(
+            AiotDeviceCreateCommand::new(association.clone(), "device-001", "Door", "1001")
+                .with_client_id("client-001")
+                .with_chip_family("esp32_s3"),
+        )
+        .expect("create device");
+    assert_eq!(created.device_id, "device-001");
+
+    let updated = repo
+        .update_device(
+            AiotDeviceUpdateCommand::new(association.clone(), "device-001")
+                .with_display_name("Door Updated")
+                .with_status("inactive"),
+        )
+        .expect("update device");
+    assert_eq!(updated.display_name, "Door Updated");
+
+    repo.delete_device(&association, "device-001")
+        .expect("delete device");
+
+    let writes = repo.writes();
+    assert_eq!(writes.len(), 3);
+    assert!(matches!(writes[0], SqlDeviceWriteOperation::Create(_)));
+    assert!(matches!(writes[1], SqlDeviceWriteOperation::Update(_)));
+    assert!(matches!(writes[2], SqlDeviceWriteOperation::Delete { .. }));
+
+    let executed = repo.executed_statements();
+    assert_eq!(executed.len(), 3);
+    assert_eq!(executed[0].statement_kind, "device_create");
+    assert_eq!(executed[1].statement_kind, "device_update");
+    assert_eq!(executed[2].statement_kind, "device_delete");
+    assert_eq!(executed[0].table, "iot_device");
+    assert_eq!(executed[1].table, "iot_device");
+    assert_eq!(executed[2].table, "iot_device");
+    assert!(executed[0].sql.contains("INSERT INTO iot_device"));
+    assert!(executed[1].sql.contains("UPDATE iot_device"));
+    assert!(executed[2].sql.contains("DELETE FROM iot_device"));
+}
+
+#[test]
+fn sqlx_device_repository_propagates_duplicate_and_not_found_errors() {
+    let repo = InMemorySqlxDeviceRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    repo.create_device(AiotDeviceCreateCommand::new(
+        association.clone(),
+        "device-dup",
+        "Dup",
+        "1001",
+    ))
+    .expect("initial create");
+
+    assert_eq!(
+        repo.create_device(AiotDeviceCreateCommand::new(
+            association.clone(),
+            "device-dup",
+            "Dup2",
+            "1002",
+        ))
+        .err(),
+        Some(AiotDeviceRepositoryError::DuplicateDeviceId)
+    );
+
+    assert_eq!(
+        repo.delete_device(&association, "missing").err(),
+        Some(AiotDeviceRepositoryError::NotFound)
+    );
+}
+
+#[test]
+fn sqlite_sqlx_device_repository_persists_crud_and_reopen_reads_state() {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("aiot-device-repo-{unique_suffix}.db"));
+    let _ = std::fs::remove_file(&path);
+
+    {
+        let repo = SqliteSqlxDeviceRepository::open(&path).expect("open sqlite repo");
+        let association = AiotStorageAssociation::tenant_org(10001, 20001);
+        repo.create_device(
+            AiotDeviceCreateCommand::new(
+                association.clone(),
+                "sqlite-device-001",
+                "SQLite Device",
+                "1007",
+            )
+            .with_client_id("sqlite-client"),
+        )
+        .expect("create device");
+
+        let updated = repo
+            .update_device(
+                AiotDeviceUpdateCommand::new(association.clone(), "sqlite-device-001")
+                    .with_display_name("SQLite Device Updated")
+                    .with_status("inactive")
+                    .with_metadata_json(r#"{"source":"sqlite"}"#),
+            )
+            .expect("update device");
+        assert_eq!(updated.display_name, "SQLite Device Updated");
+        assert_eq!(updated.status, "inactive");
+    }
+
+    {
+        let reopened = SqliteSqlxDeviceRepository::open(&path).expect("reopen sqlite repo");
+        let association = AiotStorageAssociation::tenant_org(10001, 20001);
+        let retrieved = reopened
+            .get_device(&association, "sqlite-device-001")
+            .expect("retrieve after reopen");
+        assert_eq!(retrieved.display_name, "SQLite Device Updated");
+        assert_eq!(retrieved.status, "inactive");
+        assert_eq!(
+            retrieved.metadata_json.as_deref(),
+            Some(r#"{"source":"sqlite"}"#)
+        );
+
+        reopened
+            .delete_device(&association, "sqlite-device-001")
+            .expect("delete after reopen");
+        assert!(reopened
+            .get_device(&association, "sqlite-device-001")
+            .is_none());
+    }
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sqlite_sqlx_command_repository_persists_create_and_list() {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("aiot-command-repo-{unique_suffix}.db"));
+    let _ = std::fs::remove_file(&path);
+
+    let repo = SqliteSqlxDeviceRepository::open(&path).expect("open sqlite repo");
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+    let created = repo
+        .create_command(
+            AiotCommandCreateCommand::new(association.clone(), "device-001", "speaker", "play")
+                .with_request_payload_json(r#"{"text":"hello"}"#)
+                .with_request_media(
+                    Some("media-res-001".to_string()),
+                    Some("obj-blob-001".to_string()),
+                    Some(
+                        r#"{"id":"media-res-001","kind":"audio","source":"object_storage","objectBlobId":"obj-blob-001","mimeType":"audio/opus","sizeBytes":"4096"}"#
+                            .to_string(),
+                    ),
+                )
+                .with_trace_id("trace-001"),
+        )
+        .expect("create command");
+    assert_eq!(created.device_id, "device-001");
+    assert_eq!(created.capability_name, "speaker");
+
+    let listed = repo
+        .list_commands(&association, "device-001")
+        .expect("list commands");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].command_name, "play");
+    assert_eq!(listed[0].status, "accepted");
+    assert_eq!(
+        listed[0].request_media_resource_id.as_deref(),
+        Some("media-res-001")
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sqlite_sqlx_command_repository_supports_cancel_command() {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("aiot-command-cancel-{unique_suffix}.db"));
+    let _ = std::fs::remove_file(&path);
+
+    let repo = SqliteSqlxDeviceRepository::open(&path).expect("open sqlite repo");
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    repo.create_command(
+        AiotCommandCreateCommand::new(association.clone(), "device-cancel-001", "speaker", "play")
+            .with_command_id("cmd-cancel-001"),
+    )
+    .expect("create command");
+
+    let cancelled = repo
+        .cancel_command(&association, "device-cancel-001", "cmd-cancel-001")
+        .expect("cancel command")
+        .expect("cancelled command exists");
+    assert_eq!(cancelled.status, "cancelled");
+
+    let listed = repo
+        .list_commands(&association, "device-cancel-001")
+        .expect("list commands");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].status, "cancelled");
+
+    let missing = repo
+        .cancel_command(&association, "device-cancel-001", "cmd-missing")
+        .expect("cancel missing command");
+    assert!(missing.is_none());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sqlite_sqlx_command_repository_scopes_idempotency_by_tenant_and_organization() {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let path =
+        std::env::temp_dir().join(format!("aiot-command-idempotency-scope-{unique_suffix}.db"));
+    let _ = std::fs::remove_file(&path);
+
+    let repo = SqliteSqlxDeviceRepository::open(&path).expect("open sqlite repo");
+    let association_a = AiotStorageAssociation::tenant_org(10001, 20001);
+    let association_b = AiotStorageAssociation::tenant_org(10001, 20002);
+
+    let created_a = repo
+        .create_command(
+            AiotCommandCreateCommand::new(
+                association_a.clone(),
+                "device-scope-001",
+                "speaker",
+                "play-a",
+            )
+            .with_request_payload_json(r#"{"text":"a"}"#)
+            .with_idempotency_key("same-tenant-cross-org-idem-001"),
+        )
+        .expect("create command for organization A");
+    let created_b = repo
+        .create_command(
+            AiotCommandCreateCommand::new(
+                association_b.clone(),
+                "device-scope-001",
+                "speaker",
+                "play-b",
+            )
+            .with_request_payload_json(r#"{"text":"b"}"#)
+            .with_idempotency_key("same-tenant-cross-org-idem-001"),
+        )
+        .expect("create command for organization B");
+
+    assert_ne!(created_a.command_id, created_b.command_id);
+    assert_eq!(created_a.command_name, "play-a");
+    assert_eq!(created_b.command_name, "play-b");
+
+    let listed_a = repo
+        .list_commands(&association_a, "device-scope-001")
+        .expect("list commands organization A");
+    let listed_b = repo
+        .list_commands(&association_b, "device-scope-001")
+        .expect("list commands organization B");
+    assert_eq!(listed_a.len(), 1);
+    assert_eq!(listed_b.len(), 1);
+    assert_eq!(listed_a[0].command_name, "play-a");
+    assert_eq!(listed_b[0].command_name, "play-b");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sqlite_sqlx_event_and_twin_repositories_persist_and_read_snapshot() {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("aiot-event-twin-repo-{unique_suffix}.db"));
+    let _ = std::fs::remove_file(&path);
+
+    let repo = SqliteSqlxDeviceRepository::open(&path).expect("open sqlite repo");
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    repo.record_event(
+        AiotDeviceEventCreateCommand::new(
+            association.clone(),
+            "device-001",
+            "iot.device.media_frame.ingested",
+        )
+        .with_event_id("evt-device-001-0001")
+        .with_event_version("1")
+        .with_protocol("xiaozhi.websocket", "xiaozhi")
+        .with_message_routing("mediaFrame", "audio", "websocket", "device_to_cloud")
+        .with_message_id("msg-001")
+        .with_correlation_id("corr-001")
+        .with_trace_id("trace-001")
+        .with_payload_hash(
+            "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb7625e5c7c5f5a4c5d6",
+        )
+        .with_media(
+            Some("media-res-001".to_string()),
+            Some("obj-blob-001".to_string()),
+            Some(
+                r#"{"id":"media-res-001","kind":"audio","source":"object_storage","objectBlobId":"obj-blob-001","mimeType":"audio/opus","sizeBytes":"4096"}"#
+                    .to_string(),
+            ),
+        )
+        .with_payload_json(r#"{"codec":"opus","sampleRate":16000}"#)
+        .with_occurred_at("2026-06-01T00:00:00Z"),
+    )
+    .expect("record event");
+
+    let events = repo
+        .list_events(&association, Some("device-001"))
+        .expect("list events");
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].event_id, "evt-device-001-0001");
+    assert_eq!(events[0].protocol_id, "xiaozhi.websocket");
+    assert_eq!(
+        events[0].payload_hash.as_deref(),
+        Some("d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb7625e5c7c5f5a4c5d6")
+    );
+
+    repo.upsert_twin_property(
+        AiotTwinPropertyUpsertCommand::new(association.clone(), "device-001", "volume")
+            .with_desired_value_json("80")
+            .with_reported_value_json("72"),
+    )
+    .expect("upsert twin property");
+    let twin = repo
+        .get_twin_snapshot(&association, "device-001")
+        .expect("get twin snapshot");
+    assert_eq!(twin.desired.get("volume").map(String::as_str), Some("80"));
+    assert_eq!(twin.reported.get("volume").map(String::as_str), Some("72"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sqlite_sqlx_device_session_repository_supports_disconnect_lifecycle() {
+    let unique_suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("aiot-session-disconnect-{unique_suffix}.db"));
+    let _ = std::fs::remove_file(&path);
+
+    let repo = SqliteSqlxDeviceRepository::open(&path).expect("open sqlite repo");
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+    let device_id = "device-session-001";
+    let session_id = "session-device-session-001-primary";
+
+    assert!(!repo
+        .is_session_disconnected(&association, device_id, session_id)
+        .expect("query initial session state"));
+    assert!(repo
+        .disconnect_session(&association, device_id, session_id)
+        .expect("disconnect first time"));
+    assert!(repo
+        .is_session_disconnected(&association, device_id, session_id)
+        .expect("query disconnected session"));
+    assert!(!repo
+        .disconnect_session(&association, device_id, session_id)
+        .expect("disconnect second time"));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sqlx_device_repository_rejects_non_numeric_product_id() {
+    let repo = InMemorySqlxDeviceRepository::new();
+    let association = AiotStorageAssociation::tenant_org(10001, 20001);
+
+    let result = repo.create_device(AiotDeviceCreateCommand::new(
+        association,
+        "device-invalid-product",
+        "Invalid Product",
+        "product-alpha",
+    ));
+
+    assert_eq!(
+        result.err(),
+        Some(AiotDeviceRepositoryError::InvalidProductId)
+    );
+}
 
 #[test]
 fn migration_catalog_declares_standard_iot_tables() {
     let sql = initial_migration_sql();
 
-    assert_eq!(schema_version(), "0.1.0");
+    assert_eq!(schema_version(), "0.2.0");
     assert!(sql.contains("CREATE TABLE iot_device"));
     assert!(sql.contains("tenant_id"));
     assert!(sql.contains("organization_id"));
+    assert!(sql.contains("CREATE TABLE iot_media_resource"));
+    assert!(sql.contains("CREATE TABLE iot_device_media"));
     assert!(sql.contains("CREATE TABLE iot_outbox_event"));
 }
 
@@ -37,8 +432,11 @@ fn initial_migration_contains_core_constraints_and_no_iam_tables() {
         "CREATE INDEX idx_iot_device_tenant_product_status",
         "CREATE TABLE iot_device_session",
         "CREATE TABLE iot_command",
+        "UNIQUE (tenant_id, organization_id, idempotency_key)",
         "CREATE TABLE iot_device_twin_property",
         "CREATE TABLE iot_telemetry_latest",
+        "CREATE TABLE iot_media_resource",
+        "CREATE TABLE iot_device_media",
         "CREATE TABLE iot_firmware_artifact",
         "CREATE TABLE iot_protocol_message_dead_letter",
     ] {
@@ -121,6 +519,49 @@ fn initial_migration_declares_protocol_ingest_runtime_columns_and_indexes() {
         outbox.contains("data_scope INTEGER NOT NULL DEFAULT 0"),
         "iot_outbox_event must carry data_scope for SDKWork tenant association"
     );
+    assert!(outbox.contains("event_version VARCHAR(16) NOT NULL DEFAULT '1'"));
+    assert!(outbox.contains("payload_hash VARCHAR(128)"));
+}
+
+#[test]
+fn initial_migration_aligns_media_resource_standard_for_events_and_firmware() {
+    let sql = initial_migration_sql();
+    let device_event = table_definition(sql, "iot_device_event");
+    let firmware = table_definition(sql, "iot_firmware_artifact");
+    let media_resource = table_definition(sql, "iot_media_resource");
+    let device_media = table_definition(sql, "iot_device_media");
+
+    for expected in [
+        "media_resource_id VARCHAR(128)",
+        "object_blob_id VARCHAR(128)",
+        "media_resource_snapshot TEXT",
+    ] {
+        assert!(
+            device_event.contains(expected),
+            "iot_device_event missing {expected}"
+        );
+        assert!(
+            firmware.contains(expected),
+            "iot_firmware_artifact missing {expected}"
+        );
+    }
+
+    assert!(media_resource.contains("media_resource_id VARCHAR(128) NOT NULL"));
+    assert!(media_resource.contains("kind VARCHAR(32) NOT NULL"));
+    assert!(media_resource.contains("source VARCHAR(32) NOT NULL"));
+    assert!(media_resource.contains("resource_snapshot TEXT"));
+    assert!(sql.contains("uk_iot_media_resource_tenant_resource_id"));
+    assert!(sql.contains("idx_iot_media_resource_tenant_owner"));
+    assert!(sql.contains("idx_iot_media_resource_tenant_object_blob"));
+
+    assert!(device_media.contains("media_role VARCHAR(64) NOT NULL"));
+    assert!(device_media.contains("media_resource_id VARCHAR(128) NOT NULL"));
+    assert!(device_media.contains("resource_snapshot TEXT"));
+    assert!(device_media.contains("sort_order INTEGER NOT NULL DEFAULT 0"));
+    assert!(sql.contains("idx_iot_device_media_tenant_owner_role"));
+    assert!(sql.contains("idx_iot_device_media_tenant_media"));
+
+    assert!(sql.contains("uk_iot_firmware_artifact_tenant_media_resource"));
 }
 
 #[test]
@@ -130,6 +571,9 @@ fn initial_migration_declares_protocol_ingest_idempotency_and_trace_columns() {
     for expected in [
         "message_id VARCHAR(128)",
         "correlation_id VARCHAR(128)",
+        "media_resource_id VARCHAR(128)",
+        "object_blob_id VARCHAR(128)",
+        "media_resource_snapshot TEXT",
         "idempotency_key VARCHAR(256)",
         "trace_id VARCHAR(128)",
         "CONSTRAINT uk_iot_protocol_ingest_tenant_idempotency",
@@ -137,6 +581,29 @@ fn initial_migration_declares_protocol_ingest_idempotency_and_trace_columns() {
     ] {
         assert!(sql.contains(expected), "migration missing {expected}");
     }
+}
+
+#[test]
+fn initial_migration_aligns_outbox_inbox_and_dead_letter_with_event_schema_rules() {
+    let sql = initial_migration_sql();
+    let inbox = table_definition(sql, "iot_inbox_event");
+    let dead_letter = table_definition(sql, "iot_protocol_message_dead_letter");
+    let command = table_definition(sql, "iot_command");
+    let command_result = table_definition(sql, "iot_command_result");
+
+    assert!(inbox.contains("payload_hash VARCHAR(128)"));
+    assert!(inbox.contains("error_message VARCHAR(1000)"));
+    assert!(inbox.contains("processed_at TIMESTAMP"));
+
+    assert!(dead_letter.contains("payload_hash VARCHAR(128)"));
+
+    assert!(command.contains("request_media_resource_id VARCHAR(128)"));
+    assert!(command.contains("request_object_blob_id VARCHAR(128)"));
+    assert!(command.contains("request_media_resource_snapshot TEXT"));
+
+    assert!(command_result.contains("result_media_resource_id VARCHAR(128)"));
+    assert!(command_result.contains("result_object_blob_id VARCHAR(128)"));
+    assert!(command_result.contains("result_media_resource_snapshot TEXT"));
 }
 
 #[test]
@@ -182,8 +649,13 @@ fn sqlx_protocol_uow_builds_transactional_primary_write_and_outbox_plan() {
     assert!(executed[2].sql.contains("INSERT INTO iot_outbox_event"));
     assert!(executed[0].sql.contains("message_id"));
     assert!(executed[0].sql.contains("correlation_id"));
+    assert!(executed[0].sql.contains("media_resource_id"));
+    assert!(executed[0].sql.contains("object_blob_id"));
     assert!(executed[0].sql.contains("trace_id"));
     assert!(executed[1].sql.contains("idempotency_key"));
+    assert!(executed[1].sql.contains("media_resource_snapshot"));
+    assert!(executed[2].sql.contains("event_version"));
+    assert!(executed[2].sql.contains("payload_hash"));
     assert_eq!(command.primary_table, "iot_device_session");
 }
 
@@ -303,6 +775,7 @@ fn sqlx_protocol_uow_records_dead_letter_statement_without_raw_payload() {
         .sql
         .contains("INSERT INTO iot_protocol_message_dead_letter"));
     assert!(executed[0].sql.contains("payload_ref"));
+    assert!(executed[0].sql.contains("payload_hash"));
     assert!(!executed[0].sql.contains("raw_payload"));
 }
 
@@ -474,23 +947,45 @@ fn sql_statement_plans_use_bind_values_instead_of_interpolating_runtime_values()
         executed[0].binds[5],
         SqlBindValue::Text(suspicious_device_id.to_string())
     );
+    assert_eq!(
+        executed[0].binds[6],
+        SqlBindValue::Text("msg-'quoted".to_string())
+    );
+    assert_eq!(
+        executed[0].binds[7],
+        SqlBindValue::Text("corr-004".to_string())
+    );
+    assert_eq!(executed[0].binds[8], SqlBindValue::Null);
+    assert_eq!(executed[0].binds[9], SqlBindValue::Null);
+    assert_eq!(executed[0].binds[10], SqlBindValue::Null);
+    assert_eq!(
+        executed[0].binds[11],
+        SqlBindValue::Text("idem-004".to_string())
+    );
+    assert_eq!(
+        executed[0].binds[12],
+        SqlBindValue::Text("trace-004".to_string())
+    );
     assert_eq!(executed[0].binds.last(), Some(&SqlBindValue::Int64(0)));
 
     assert_eq!(executed[1].statement_kind, "primary_write");
     assert_eq!(executed[1].binds[0], SqlBindValue::Int64(1));
-    assert_eq!(executed[1].binds[1], SqlBindValue::Int64(0));
-    assert_eq!(executed[1].binds[2], SqlBindValue::Int64(0));
-    assert_eq!(executed[1].binds[3], SqlBindValue::Int64(0));
+    assert_eq!(executed[1].binds[1], SqlBindValue::Null);
+    assert_eq!(executed[1].binds[2], SqlBindValue::Null);
+    assert_eq!(executed[1].binds[3], SqlBindValue::Null);
+    assert_eq!(executed[1].binds[4], SqlBindValue::Int64(0));
+    assert_eq!(executed[1].binds[5], SqlBindValue::Int64(0));
+    assert_eq!(executed[1].binds[6], SqlBindValue::Int64(0));
     assert_eq!(
-        executed[1].binds[4],
+        executed[1].binds[7],
         SqlBindValue::Text("xiaozhi.websocket".to_string())
     );
     assert_eq!(
-        executed[1].binds[5],
+        executed[1].binds[8],
         SqlBindValue::Text("xiaozhi".to_string())
     );
     assert_eq!(
-        executed[1].binds[6],
+        executed[1].binds[9],
         SqlBindValue::Text(suspicious_device_id.to_string())
     );
     assert_eq!(

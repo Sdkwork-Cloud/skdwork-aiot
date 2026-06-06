@@ -5,6 +5,13 @@ version.workspace = true
 license.workspace = true
 
 [dependencies]
+serde_json = "1"
 sdkwork-aiot-contract = { path = "../sdkwork-aiot-contract" }
+sdkwork-aiot-core = { path = "../sdkwork-aiot-core" }
+sdkwork-aiot-protocol = { path = "../sdkwork-aiot-protocol" }
 sdkwork-aiot-runtime = { path = "../sdkwork-aiot-runtime" }
+sdkwork-aiot-storage = { path = "../sdkwork-aiot-storage" }
 sdkwork-aiot-transport = { path = "../sdkwork-aiot-transport" }
+
+[dev-dependencies]
+sdkwork-aiot-storage-sqlx = { path = "../sdkwork-aiot-storage-sqlx" }

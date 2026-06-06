@@ -1,9 +1,16 @@
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::path::Path;
 use std::time::Duration;
 
 fn main() {
-    let server = sdkwork_aiot_http_api::standard_app_api_server().expect("app api server");
+    let shared_repository = std::sync::Arc::new(build_device_repository());
+    let server = sdkwork_aiot_http_api::standard_app_api_server()
+        .expect("app api server")
+        .with_device_repository(shared_repository.clone())
+        .with_command_repository(shared_repository.clone())
+        .with_event_repository(shared_repository.clone())
+        .with_twin_repository(shared_repository);
     let plan = sdkwork_aiot_runtime::RuntimeServicePlan::standard();
 
     println!(
@@ -20,6 +27,36 @@ fn main() {
     let bind_addr = std::env::var("SDKWORK_AIOT_APP_API_BIND")
         .unwrap_or_else(|_| "127.0.0.1:18082".to_string());
     serve(&server, &bind_addr);
+}
+
+fn build_device_repository() -> sdkwork_aiot_storage_sqlx::SqliteSqlxDeviceRepository {
+    if let Some(path) = configured_device_db_path("SDKWORK_AIOT_APP_API_DEVICE_DB_PATH") {
+        ensure_parent_directory_exists(&path);
+        println!("sdkwork-aiot-app-api device-db=sqlite file={path}");
+        return sdkwork_aiot_storage_sqlx::SqliteSqlxDeviceRepository::open(path)
+            .expect("open sqlite aiot device repository");
+    }
+
+    println!("sdkwork-aiot-app-api device-db=sqlite mode=memory");
+    sdkwork_aiot_storage_sqlx::SqliteSqlxDeviceRepository::new_in_memory()
+        .expect("sqlite aiot device repository")
+}
+
+fn configured_device_db_path(service_env_key: &str) -> Option<String> {
+    std::env::var(service_env_key)
+        .ok()
+        .or_else(|| std::env::var("SDKWORK_AIOT_DEVICE_DB_PATH").ok())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn ensure_parent_directory_exists(path: &str) {
+    let parent = Path::new(path).parent();
+    if let Some(parent) = parent {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).expect("create sqlite parent directory");
+        }
+    }
 }
 
 fn serve(server: &sdkwork_aiot_http_api::AiotApiServer, bind_addr: &str) {

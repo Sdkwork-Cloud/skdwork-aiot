@@ -1,3 +1,6 @@
+use aes::cipher::{KeyIvInit, StreamCipher};
+use aes::Aes128;
+use ctr::Ctr128BE;
 use sdkwork_aiot_protocol::{
     CodecKind, HandshakeContext, InboundFrame, MessageClass, MessageCodec, OutboundFrame,
     ProtocolAdapterManifest, ProtocolEnvelope, ProtocolError, ProtocolPluginScope, SessionPolicy,
@@ -9,6 +12,9 @@ pub const XIAOZHI_BASE_PATH: &str = "/iot/xiaozhi";
 pub const XIAOZHI_WS_PATH: &str = "/iot/xiaozhi/ws";
 pub const XIAOZHI_OTA_PATH: &str = "/iot/xiaozhi/ota";
 pub const XIAOZHI_ACTIVATE_PATH: &str = "/iot/xiaozhi/activate";
+pub const XIAOZHI_OTA_ACTIVATE_PATH: &str = "/iot/xiaozhi/ota/activate";
+pub const XIAOZHI_MQTT_PATH: &str = "/iot/xiaozhi/mqtt";
+pub const XIAOZHI_UDP_PATH: &str = "/iot/xiaozhi/udp";
 
 pub const AUTHORIZATION_HEADER: &str = "Authorization";
 pub const PROTOCOL_VERSION_HEADER: &str = "Protocol-Version";
@@ -20,6 +26,7 @@ pub const XIAOZHI_MQTT_UDP_PROTOCOL_ID: &str = "xiaozhi.mqtt_udp";
 
 const XIAOZHI_BINARY_TYPE_OPUS: u16 = 0;
 const XIAOZHI_BINARY_TYPE_JSON: u16 = 1;
+const XIAOZHI_UDP_PACKET_TYPE_AUDIO: u8 = 0x01;
 
 pub fn xiaozhi_manifest() -> ProtocolAdapterManifest {
     ProtocolAdapterManifest::new("xiaozhi", env!("CARGO_PKG_VERSION"))
@@ -27,6 +34,7 @@ pub fn xiaozhi_manifest() -> ProtocolAdapterManifest {
         .with_protocol(XIAOZHI_WEBSOCKET_PROTOCOL_ID)
         .with_protocol(XIAOZHI_MQTT_UDP_PROTOCOL_ID)
         .with_transport(TransportBinding::WebSocket)
+        .with_transport(TransportBinding::Http)
         .with_transport(TransportBinding::Mqtt)
         .with_transport(TransportBinding::Udp)
         .with_codec(CodecKind::JsonText)
@@ -46,7 +54,14 @@ pub fn xiaozhi_manifest() -> ProtocolAdapterManifest {
 }
 
 pub fn xiaozhi_routes() -> Vec<&'static str> {
-    vec![XIAOZHI_WS_PATH, XIAOZHI_OTA_PATH, XIAOZHI_ACTIVATE_PATH]
+    vec![
+        XIAOZHI_WS_PATH,
+        XIAOZHI_OTA_PATH,
+        XIAOZHI_ACTIVATE_PATH,
+        XIAOZHI_OTA_ACTIVATE_PATH,
+        XIAOZHI_MQTT_PATH,
+        XIAOZHI_UDP_PATH,
+    ]
 }
 
 pub fn xiaozhi_handshake_context<I, K, V>(headers: I) -> HandshakeContext
@@ -98,6 +113,7 @@ pub struct XiaozhiServerHello {
     pub transport: String,
     pub session_id: String,
     pub audio_params: Option<XiaozhiAudioParams>,
+    pub udp: Option<XiaozhiMqttUdpProfileConfig>,
 }
 
 impl XiaozhiServerHello {
@@ -106,6 +122,27 @@ impl XiaozhiServerHello {
             transport: "websocket".to_string(),
             session_id: session_id.into(),
             audio_params: None,
+            udp: None,
+        }
+    }
+
+    pub fn mqtt_udp(
+        session_id: impl Into<String>,
+        server: impl Into<String>,
+        port: u16,
+        key_hex: impl Into<String>,
+        nonce_hex: impl Into<String>,
+    ) -> Self {
+        Self {
+            transport: "udp".to_string(),
+            session_id: session_id.into(),
+            audio_params: None,
+            udp: Some(XiaozhiMqttUdpProfileConfig {
+                server: server.into(),
+                port,
+                key_hex: key_hex.into(),
+                nonce_hex: nonce_hex.into(),
+            }),
         }
     }
 
@@ -125,6 +162,18 @@ pub fn xiaozhi_server_hello_response(hello: XiaozhiServerHello) -> String {
     if let Some(audio_params) = hello.audio_params {
         out.push_str(r#","audio_params":"#);
         out.push_str(&audio_params_json(&audio_params));
+    }
+
+    if let Some(udp) = hello.udp {
+        out.push_str(r#","udp":{"server":""#);
+        out.push_str(&json_escape(&udp.server));
+        out.push_str(r#"","port":"#);
+        out.push_str(&udp.port.to_string());
+        out.push_str(r#","key":""#);
+        out.push_str(&json_escape(&udp.key_hex));
+        out.push_str(r#"","nonce":""#);
+        out.push_str(&json_escape(&udp.nonce_hex));
+        out.push_str(r#""}"#);
     }
 
     out.push('}');
@@ -147,6 +196,14 @@ pub struct XiaozhiMqttOtaConfig {
     pub publish_topic: String,
     pub subscribe_topic: String,
     pub keepalive: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XiaozhiMqttUdpProfileConfig {
+    pub server: String,
+    pub port: u16,
+    pub key_hex: String,
+    pub nonce_hex: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -174,6 +231,7 @@ pub struct XiaozhiServerTime {
 pub struct XiaozhiOtaMetadata {
     pub websocket: Option<XiaozhiWebSocketOtaConfig>,
     pub mqtt: Option<XiaozhiMqttOtaConfig>,
+    pub udp: Option<XiaozhiMqttUdpProfileConfig>,
     pub firmware: Option<XiaozhiFirmwareOtaConfig>,
     pub activation: Option<XiaozhiActivationConfig>,
     pub server_time: Option<XiaozhiServerTime>,
@@ -184,10 +242,27 @@ impl XiaozhiOtaMetadata {
         Self {
             websocket: None,
             mqtt: None,
+            udp: None,
             firmware: None,
             activation: None,
             server_time: None,
         }
+    }
+
+    pub fn with_mqtt_udp(
+        mut self,
+        server: impl Into<String>,
+        port: u16,
+        key_hex: impl Into<String>,
+        nonce_hex: impl Into<String>,
+    ) -> Self {
+        self.udp = Some(XiaozhiMqttUdpProfileConfig {
+            server: server.into(),
+            port,
+            key_hex: key_hex.into(),
+            nonce_hex: nonce_hex.into(),
+        });
+        self
     }
 
     pub fn with_websocket(
@@ -311,6 +386,16 @@ pub fn xiaozhi_ota_response(metadata: XiaozhiOtaMetadata) -> String {
         ));
     }
 
+    if let Some(udp) = metadata.udp {
+        fields.push(format!(
+            r#""udp":{{"server":"{}","port":{},"key":"{}","nonce":"{}"}}"#,
+            json_escape(&udp.server),
+            udp.port,
+            json_escape(&udp.key_hex),
+            json_escape(&udp.nonce_hex),
+        ));
+    }
+
     if let Some(firmware) = metadata.firmware {
         fields.push(format!(
             r#""firmware":{{"version":"{}","url":"{}","force":{}}}"#,
@@ -392,6 +477,251 @@ impl XiaozhiWebSocketCodec {
 impl Default for XiaozhiWebSocketCodec {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XiaozhiMqttCodec {
+    device_id: Option<String>,
+    client_id: Option<String>,
+}
+
+impl XiaozhiMqttCodec {
+    pub fn new() -> Self {
+        Self {
+            device_id: None,
+            client_id: None,
+        }
+    }
+
+    pub fn with_device_and_client(
+        mut self,
+        device_id: impl Into<String>,
+        client_id: impl Into<String>,
+    ) -> Self {
+        self.device_id = Some(device_id.into());
+        self.client_id = Some(client_id.into());
+        self
+    }
+}
+
+impl Default for XiaozhiMqttCodec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MessageCodec for XiaozhiMqttCodec {
+    fn decode(&self, frame: InboundFrame) -> Result<ProtocolEnvelope, ProtocolError> {
+        if frame.binary {
+            return Err(ProtocolError::new(
+                "xiaozhi.mqtt.payload.unsupported_binary",
+                "xiaozhi mqtt control channel requires UTF-8 JSON payload",
+            ));
+        }
+
+        let text = std::str::from_utf8(&frame.payload).map_err(|_| {
+            ProtocolError::new(
+                "xiaozhi.payload.invalid_utf8",
+                "xiaozhi text frames must be valid UTF-8 JSON",
+            )
+        })?;
+
+        let message_type = json_string_field(text, "type").ok_or_else(|| {
+            ProtocolError::new(
+                "xiaozhi.message_type.missing",
+                "xiaozhi JSON frame must contain a type field",
+            )
+        })?;
+        let message_class = map_xiaozhi_message_class(&message_type).ok_or_else(|| {
+            ProtocolError::new(
+                "xiaozhi.message_type.unsupported",
+                format!("unsupported xiaozhi message type: {message_type}"),
+            )
+        })?;
+
+        let mut builder = ProtocolEnvelope::builder(XIAOZHI_MQTT_UDP_PROTOCOL_ID, message_class)
+            .adapter("xiaozhi")
+            .semantic_type(&message_type)
+            .json_payload(text)
+            .extension("xiaozhi.transport", "udp");
+
+        if let Some(protocol_version) = json_scalar_field(text, "version") {
+            builder = builder.protocol_version(protocol_version);
+        }
+
+        if let Some(device_id) = self.device_id.clone() {
+            builder = builder.device(device_id);
+        } else if let Some(device_id) = json_string_field(text, "device_id") {
+            builder = builder.device(device_id);
+        }
+
+        if let Some(client_id) = self.client_id.clone() {
+            builder = builder.client(client_id);
+        } else if let Some(client_id) = json_string_field(text, "client_id") {
+            builder = builder.client(client_id);
+        }
+
+        if let Some(session_id) = json_string_field(text, "session_id") {
+            builder = builder.session(session_id);
+        }
+
+        if let Some(message_id) = json_string_field(text, "message_id") {
+            builder = builder.message_id(message_id);
+        }
+
+        if let Some(correlation_id) = json_scalar_field(text, "correlation_id") {
+            builder = builder.correlation_id(correlation_id);
+        }
+
+        builder = apply_features(builder, text);
+        builder = apply_audio_params(builder, text);
+        builder = apply_message_type_extensions(builder, text, &message_type);
+
+        Ok(builder.build())
+    }
+
+    fn encode(&self, envelope: ProtocolEnvelope) -> Result<OutboundFrame, ProtocolError> {
+        if envelope.protocol_id != XIAOZHI_MQTT_UDP_PROTOCOL_ID {
+            return Err(ProtocolError::new(
+                "xiaozhi.protocol.unsupported",
+                "xiaozhi mqtt codec can only encode xiaozhi.mqtt_udp envelopes",
+            ));
+        }
+
+        if envelope.payload_encoding == "binary" {
+            return Err(ProtocolError::new(
+                "xiaozhi.mqtt.payload.unsupported_binary",
+                "xiaozhi mqtt control channel does not carry binary media payloads",
+            ));
+        }
+
+        String::from_utf8(envelope.payload)
+            .map(OutboundFrame::text)
+            .map_err(|_| {
+                ProtocolError::new(
+                    "xiaozhi.payload.invalid_utf8",
+                    "xiaozhi text frames must be valid UTF-8 JSON",
+                )
+            })
+    }
+}
+
+type Aes128Ctr = Ctr128BE<Aes128>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XiaozhiUdpAudioPacket {
+    pub flags: u8,
+    pub ssrc: u32,
+    pub timestamp: u32,
+    pub sequence: u32,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct XiaozhiUdpAudioCodec {
+    key: [u8; 16],
+    nonce_prefix: [u8; 16],
+}
+
+impl XiaozhiUdpAudioCodec {
+    pub fn new(key_hex: &str, nonce_hex: &str) -> Result<Self, ProtocolError> {
+        Ok(Self {
+            key: decode_hex_16(key_hex, "xiaozhi.udp.key.invalid_hex")?,
+            nonce_prefix: decode_hex_16(nonce_hex, "xiaozhi.udp.nonce.invalid_hex")?,
+        })
+    }
+
+    pub fn encode_audio_packet(
+        &self,
+        timestamp: u32,
+        sequence: u32,
+        payload: impl AsRef<[u8]>,
+    ) -> Result<Vec<u8>, ProtocolError> {
+        let payload = payload.as_ref();
+        let payload_len = u16::try_from(payload.len()).map_err(|_| {
+            ProtocolError::new(
+                "xiaozhi.udp.payload_too_large",
+                "xiaozhi udp payload length exceeds u16",
+            )
+        })?;
+
+        let mut nonce = self.nonce_prefix;
+        nonce[2..4].copy_from_slice(&payload_len.to_be_bytes());
+        nonce[8..12].copy_from_slice(&timestamp.to_be_bytes());
+        nonce[12..16].copy_from_slice(&sequence.to_be_bytes());
+
+        let mut encrypted_payload = payload.to_vec();
+        let mut cipher = Aes128Ctr::new(&self.key.into(), &nonce.into());
+        cipher.apply_keystream(&mut encrypted_payload);
+
+        let mut packet = Vec::with_capacity(16 + encrypted_payload.len());
+        packet.extend_from_slice(&nonce);
+        packet.extend_from_slice(&encrypted_payload);
+        Ok(packet)
+    }
+
+    pub fn decode_audio_packet(
+        &self,
+        packet: &[u8],
+    ) -> Result<XiaozhiUdpAudioPacket, ProtocolError> {
+        self.decode_audio_packet_with_min_sequence(packet, 0)
+    }
+
+    pub fn decode_audio_packet_with_min_sequence(
+        &self,
+        packet: &[u8],
+        min_sequence: u32,
+    ) -> Result<XiaozhiUdpAudioPacket, ProtocolError> {
+        if packet.len() < 16 {
+            return Err(ProtocolError::new(
+                "xiaozhi.udp.packet.too_short",
+                "xiaozhi udp packet must include a 16-byte header",
+            ));
+        }
+
+        if packet[0] != XIAOZHI_UDP_PACKET_TYPE_AUDIO {
+            return Err(ProtocolError::new(
+                "xiaozhi.udp.packet.unsupported_type",
+                format!("unsupported xiaozhi udp packet type: {}", packet[0]),
+            ));
+        }
+
+        let flags = packet[1];
+        let payload_len = u16::from_be_bytes([packet[2], packet[3]]) as usize;
+        if packet.len() != 16 + payload_len {
+            return Err(ProtocolError::new(
+                "xiaozhi.udp.packet.payload_size_mismatch",
+                "xiaozhi udp packet payload size does not match packet length",
+            ));
+        }
+
+        let ssrc = u32::from_be_bytes([packet[4], packet[5], packet[6], packet[7]]);
+        let timestamp = u32::from_be_bytes([packet[8], packet[9], packet[10], packet[11]]);
+        let sequence = u32::from_be_bytes([packet[12], packet[13], packet[14], packet[15]]);
+        if sequence < min_sequence {
+            return Err(ProtocolError::new(
+                "xiaozhi.udp.sequence.stale",
+                format!("stale xiaozhi udp sequence: {sequence} < {min_sequence}"),
+            ));
+        }
+
+        let nonce = [
+            packet[0], packet[1], packet[2], packet[3], packet[4], packet[5], packet[6], packet[7],
+            packet[8], packet[9], packet[10], packet[11], packet[12], packet[13], packet[14],
+            packet[15],
+        ];
+        let mut decrypted_payload = packet[16..].to_vec();
+        let mut cipher = Aes128Ctr::new(&self.key.into(), &nonce.into());
+        cipher.apply_keystream(&mut decrypted_payload);
+
+        Ok(XiaozhiUdpAudioPacket {
+            flags,
+            ssrc,
+            timestamp,
+            sequence,
+            payload: decrypted_payload,
+        })
     }
 }
 
@@ -774,6 +1104,22 @@ fn apply_message_type_extensions(
                 }
             }
         }
+        "alert" => {
+            for (field, extension) in [
+                ("status", "xiaozhi.alert.status"),
+                ("message", "xiaozhi.alert.message"),
+                ("emotion", "xiaozhi.alert.emotion"),
+            ] {
+                if let Some(value) = json_scalar_field(json, field) {
+                    builder = builder.extension(extension, value);
+                }
+            }
+        }
+        "custom" => {
+            if json_field_value_range(json, "payload").is_some() {
+                builder = builder.extension("xiaozhi.custom.payload", "present");
+            }
+        }
         "mcp" => {
             builder = apply_mcp_extensions(builder, json);
         }
@@ -805,6 +1151,9 @@ fn apply_mcp_extensions(
         builder = builder
             .correlation_id(id.clone())
             .extension("xiaozhi.mcp.id", id.clone());
+        if let Some((start, end)) = json_field_value_range(payload, "id") {
+            builder = builder.extension("xiaozhi.mcp.id_json", payload[start..end].trim());
+        }
     }
 
     let has_method = json_field_value_range(payload, "method").is_some();
@@ -831,6 +1180,38 @@ fn audio_params_json(audio_params: &XiaozhiAudioParams) -> String {
         audio_params.channels,
         audio_params.frame_duration
     )
+}
+
+fn decode_hex_16(input: &str, code: &str) -> Result<[u8; 16], ProtocolError> {
+    let input = input.trim();
+    if input.len() != 32 {
+        return Err(ProtocolError::new(
+            code,
+            "xiaozhi udp crypto material must be 32 hex characters",
+        ));
+    }
+
+    let mut out = [0u8; 16];
+    for (index, chunk) in input.as_bytes().chunks(2).enumerate() {
+        let hi = hex_nibble(chunk[0]).ok_or_else(|| {
+            ProtocolError::new(code, "xiaozhi udp crypto material contains invalid hex")
+        })?;
+        let lo = hex_nibble(chunk[1]).ok_or_else(|| {
+            ProtocolError::new(code, "xiaozhi udp crypto material contains invalid hex")
+        })?;
+        out[index] = (hi << 4) | lo;
+    }
+
+    Ok(out)
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn json_escape(input: &str) -> String {
