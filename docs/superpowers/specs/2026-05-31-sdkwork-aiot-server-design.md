@@ -29,9 +29,9 @@ Out of current scope:
 
 The design follows SDKWork standards from:
 
-- `D:\javasource\spring-ai-plus\spring-ai-plus-business\specs`
-- `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\sdkwork-claw-router`
-- `D:\javasource\spring-ai-plus\spring-ai-plus-business\apps\sdkwork-appbase`
+- `../sdkwork-specs`
+- `../sdkwork-claw-router`
+- `../sdkwork-appbase`
 
 Normative constraints:
 

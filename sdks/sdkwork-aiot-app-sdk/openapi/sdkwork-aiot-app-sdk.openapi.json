@@ -38,12 +38,14 @@
       "get": {
         "tags": ["iot"],
         "operationId": "devices.list",
+        "x-sdkwork-owner": "sdkwork-aiot",
+        "x-sdkwork-api-authority": "sdkwork-aiot-app-api",
         "x-sdkwork-required-permission": "iot.devices.read",
         "summary": "List user-visible AIoT devices",
         "security": [
           {
-            "Authorization": [],
-            "Access-Token": []
+            "AuthToken": [],
+            "AccessToken": []
           }
         ],
         "responses": {
@@ -84,12 +86,14 @@
       "get": {
         "tags": ["iot"],
         "operationId": "devices.retrieve",
+        "x-sdkwork-owner": "sdkwork-aiot",
+        "x-sdkwork-api-authority": "sdkwork-aiot-app-api",
         "x-sdkwork-required-permission": "iot.devices.read",
         "summary": "Retrieve one AIoT device",
         "security": [
           {
-            "Authorization": [],
-            "Access-Token": []
+            "AuthToken": [],
+            "AccessToken": []
           }
         ],
         "parameters": [
@@ -135,12 +139,14 @@
       "post": {
         "tags": ["iot"],
         "operationId": "devices.commands.create",
+        "x-sdkwork-owner": "sdkwork-aiot",
+        "x-sdkwork-api-authority": "sdkwork-aiot-app-api",
         "x-sdkwork-required-permission": "iot.commands.execute",
         "summary": "Create a device command",
         "security": [
           {
-            "Authorization": [],
-            "Access-Token": []
+            "AuthToken": [],
+            "AccessToken": []
           }
         ],
         "parameters": [
@@ -199,12 +205,14 @@
       "get": {
         "tags": ["iot"],
         "operationId": "devices.twin.retrieve",
+        "x-sdkwork-owner": "sdkwork-aiot",
+        "x-sdkwork-api-authority": "sdkwork-aiot-app-api",
         "x-sdkwork-required-permission": "iot.twins.read",
         "summary": "Retrieve device twin",
         "security": [
           {
-            "Authorization": [],
-            "Access-Token": []
+            "AuthToken": [],
+            "AccessToken": []
           }
         ],
         "parameters": [
@@ -250,12 +258,14 @@
       "get": {
         "tags": ["iot"],
         "operationId": "devices.events.list",
+        "x-sdkwork-owner": "sdkwork-aiot",
+        "x-sdkwork-api-authority": "sdkwork-aiot-app-api",
         "x-sdkwork-required-permission": "iot.devices.read",
         "summary": "List device events",
         "security": [
           {
-            "Authorization": [],
-            "Access-Token": []
+            "AuthToken": [],
+            "AccessToken": []
           }
         ],
         "parameters": [
@@ -283,13 +293,13 @@
   },
   "components": {
     "securitySchemes": {
-      "Authorization": {
+      "AuthToken": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Authorization: Bearer <auth_token>"
       },
-      "Access-Token": {
+      "AccessToken": {
         "type": "apiKey",
         "in": "header",
         "name": "Access-Token",

@@ -1,0 +1,1 @@
+{"version":3,"file":"aiot-device-response.d.ts","sourceRoot":"","sources":["../../src/types/aiot-device-response.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,UAAU,EAAE,MAAM,eAAe,CAAC;AAEhD,MAAM,WAAW,kBAAkB;IACjC,IAAI,EAAE,MAAM,CAAC;IACb,GAAG,CAAC,EAAE,MAAM,CAAC;IACb,IAAI,EAAE,UAAU,CAAC;CAClB"}

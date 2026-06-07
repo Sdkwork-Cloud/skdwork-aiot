@@ -1,0 +1,1 @@
+{"version":3,"file":"problem-details.d.ts","sourceRoot":"","sources":["../../src/types/problem-details.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,cAAc;IAC7B,IAAI,EAAE,MAAM,CAAC;IACb,KAAK,EAAE,MAAM,CAAC;IACd,MAAM,EAAE,MAAM,CAAC;IACf,MAAM,CAAC,EAAE,MAAM,CAAC;IAChB,OAAO,CAAC,EAAE,MAAM,CAAC;IACjB,IAAI,CAAC,EAAE,MAAM,CAAC;CACf"}

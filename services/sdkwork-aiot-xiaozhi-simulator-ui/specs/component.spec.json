@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Xiaozhi Simulator Ui",
     "version": "0.1.0",
     "type": "web-backend-service",
-    "root": "skdwork-aiot/services/sdkwork-aiot-xiaozhi-simulator-ui",
+    "root": "sdkwork-aiot/services/sdkwork-aiot-xiaozhi-simulator-ui",
     "domain": "intelligence",
     "capability": "aiot-xiaozhi-simulator-ui",
     "languages": [

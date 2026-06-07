@@ -1,0 +1,1 @@
+{"version":3,"file":"aiot-command-response.d.ts","sourceRoot":"","sources":["../../src/types/aiot-command-response.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,WAAW,EAAE,MAAM,gBAAgB,CAAC;AAElD,MAAM,WAAW,mBAAmB;IAClC,IAAI,EAAE,MAAM,CAAC;IACb,GAAG,CAAC,EAAE,MAAM,CAAC;IACb,IAAI,EAAE,WAAW,CAAC;CACnB"}

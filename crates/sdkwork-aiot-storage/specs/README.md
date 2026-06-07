@@ -2,7 +2,7 @@
 
 This directory is the local SDKWork component contract for `sdkwork-aiot-storage`.
 
-- Component root: `skdwork-aiot/crates/sdkwork-aiot-storage`
+- Component root: `sdkwork-aiot/crates/sdkwork-aiot-storage`
 - Canonical standards: `../../../sdkwork-specs/README.md`
 - Machine-readable contract: `specs/component.spec.json`
 

@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Admin Api",
     "version": "0.1.0",
     "type": "web-backend-service",
-    "root": "skdwork-aiot/services/sdkwork-aiot-admin-api",
+    "root": "sdkwork-aiot/services/sdkwork-aiot-admin-api",
     "domain": "intelligence",
     "capability": "aiot-admin-api",
     "languages": [

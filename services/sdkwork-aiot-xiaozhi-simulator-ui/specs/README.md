@@ -2,7 +2,7 @@
 
 This directory is the local SDKWork component contract for `sdkwork-aiot-xiaozhi-simulator-ui`.
 
-- Component root: `skdwork-aiot/services/sdkwork-aiot-xiaozhi-simulator-ui`
+- Component root: `sdkwork-aiot/services/sdkwork-aiot-xiaozhi-simulator-ui`
 - Canonical standards: `../../../sdkwork-specs/README.md`
 - Machine-readable contract: `specs/component.spec.json`
 

@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "kind": "sdkwork.component.spec",
+  "component": {
+    "name": "sdkwork-aiot-app-sdk",
+    "displayName": "SDKWork AIoT App SDK",
+    "version": "0.1.0",
+    "type": "sdk-family",
+    "root": "sdkwork-aiot/sdks/sdkwork-aiot-app-sdk",
+    "domain": "device",
+    "capability": "aiot-app-sdk",
+    "languages": [
+      "typescript"
+    ],
+    "generated": false,
+    "manifests": [
+      ".sdkwork-assembly.json",
+      "openapi/sdkwork-aiot-app-sdk.openapi.json",
+      "openapi/sdkwork-aiot-app-sdk.sdkgen.json"
+    ]
+  },
+  "canonicalSpecs": [
+    {
+      "file": "COMPONENT_SPEC.md",
+      "path": "../../../sdkwork-specs/COMPONENT_SPEC.md",
+      "purpose": "Component-local contract and discovery rules."
+    },
+    {
+      "file": "CODE_STYLE_SPEC.md",
+      "path": "../../../sdkwork-specs/CODE_STYLE_SPEC.md",
+      "purpose": "Authored source structure and generated code boundaries."
+    },
+    {
+      "file": "NAMING_SPEC.md",
+      "path": "../../../sdkwork-specs/NAMING_SPEC.md",
+      "purpose": "Canonical SDKWork naming rules."
+    },
+    {
+      "file": "SDK_SPEC.md",
+      "path": "../../../sdkwork-specs/SDK_SPEC.md",
+      "purpose": "SDK family, generated client integration, auth, and no raw HTTP fallback rules."
+    },
+    {
+      "file": "SDK_WORKSPACE_GENERATION_SPEC.md",
+      "path": "../../../sdkwork-specs/SDK_WORKSPACE_GENERATION_SPEC.md",
+      "purpose": "SDK workspace and generated artifact placement rules."
+    },
+    {
+      "file": "API_SPEC.md",
+      "path": "../../../sdkwork-specs/API_SPEC.md",
+      "purpose": "OpenAPI authority rules for SDK generation."
+    },
+    {
+      "file": "TEST_SPEC.md",
+      "path": "../../../sdkwork-specs/TEST_SPEC.md",
+      "purpose": "Verification and contract testing expectations."
+    },
+    {
+      "file": "TYPESCRIPT_CODE_SPEC.md",
+      "path": "../../../sdkwork-specs/TYPESCRIPT_CODE_SPEC.md",
+      "purpose": "TypeScript wrapper and generated SDK facade rules."
+    }
+  ],
+  "contracts": {
+    "apiAuthority": "sdkwork-aiot-app-api",
+    "sdkOwner": "sdkwork-aiot",
+    "sdkFamily": "sdkwork-aiot-app-sdk",
+    "sdkDependencies": [],
+    "apiPrefix": "/app/v3/api",
+    "publicExports": [
+      "@sdkwork/aiot-app-sdk"
+    ],
+    "runtimeEntrypoints": [
+      "sdkwork-aiot-app-sdk-typescript/package.json#scripts.typecheck"
+    ],
+    "routeManifest": null,
+    "sdkClients": [
+      "SdkworkAiotAppClient"
+    ],
+    "events": [
+      "iot.device.connected",
+      "iot.command.created",
+      "iot.twin.reported.updated",
+      "iot.telemetry.received"
+    ],
+    "configKeys": [
+      "SdkworkAiotAppClientConfig"
+    ]
+  },
+  "verification": {
+    "commands": [
+      "node ./bin/publish-core.mjs --language typescript --project-dir . --action check",
+      "node ./bin/publish-core.mjs --language typescript --project-dir . --action build",
+      "pnpm typecheck"
+    ]
+  }
+}

@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Observability",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-observability",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-observability",
     "domain": "intelligence",
     "capability": "aiot-observability",
     "languages": [

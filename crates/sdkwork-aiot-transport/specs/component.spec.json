@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Transport",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-transport",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-transport",
     "domain": "intelligence",
     "capability": "aiot-transport",
     "languages": [

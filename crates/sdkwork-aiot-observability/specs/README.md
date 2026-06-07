@@ -2,7 +2,7 @@
 
 This directory is the local SDKWork component contract for `sdkwork-aiot-observability`.
 
-- Component root: `skdwork-aiot/crates/sdkwork-aiot-observability`
+- Component root: `sdkwork-aiot/crates/sdkwork-aiot-observability`
 - Canonical standards: `../../../sdkwork-specs/README.md`
 - Machine-readable contract: `specs/component.spec.json`
 

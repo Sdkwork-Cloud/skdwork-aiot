@@ -6,8 +6,8 @@
     "displayName": "Aiot App Sdk",
     "version": "0.1.0",
     "type": "node-package",
-    "root": "skdwork-aiot/sdks/sdkwork-aiot-app-sdk/sdkwork-aiot-app-sdk-typescript",
-    "domain": "intelligence",
+    "root": "sdkwork-aiot/sdks/sdkwork-aiot-app-sdk/sdkwork-aiot-app-sdk-typescript",
+    "domain": "device",
     "capability": "aiot-app-sdk",
     "languages": [
       "typescript"
@@ -65,6 +65,11 @@
     }
   ],
   "contracts": {
+    "apiAuthority": "sdkwork-aiot-app-api",
+    "sdkOwner": "sdkwork-aiot",
+    "sdkFamily": "sdkwork-aiot-app-sdk",
+    "sdkDependencies": [],
+    "apiPrefix": "/app/v3/api",
     "publicExports": [
       "."
     ],
@@ -72,7 +77,9 @@
       "package.json#scripts.typecheck"
     ],
     "routeManifest": null,
-    "sdkClients": [],
+    "sdkClients": [
+      "SdkworkAiotAppClient"
+    ],
     "events": [],
     "configKeys": []
   },

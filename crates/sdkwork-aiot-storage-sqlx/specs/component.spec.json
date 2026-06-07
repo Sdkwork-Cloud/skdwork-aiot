@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Storage Sqlx",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-storage-sqlx",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-storage-sqlx",
     "domain": "drive",
     "capability": "aiot-storage-sqlx",
     "languages": [

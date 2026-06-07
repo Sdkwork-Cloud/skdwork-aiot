@@ -1,12 +1,16 @@
 {
   "workspace": "sdkwork-aiot-app-sdk",
+  "sdkFamily": "sdkwork-aiot-app-sdk",
+  "sdkOwner": "sdkwork-aiot",
+  "apiAuthority": "sdkwork-aiot-app-api",
+  "sdkDependencies": [],
   "title": "SDKWork AIoT App API SDK",
   "apiVersion": "0.1.0",
   "authoritySpec": "openapi/sdkwork-aiot-app-sdk.openapi.json",
   "generationInputSpec": "openapi/sdkwork-aiot-app-sdk.openapi.json",
   "discoverySurface": {
     "sdkTarget": "app",
-    "apiPrefix": "/app/v3/api/iot",
+    "apiPrefix": "/app/v3/api",
     "generatedProtocols": ["http"],
     "manualTransports": []
   },
@@ -21,7 +25,7 @@
       "description": "SDKWork AIoT app API generated transport SDK",
       "consumerSurface": {
         "primaryClient": "SdkworkAiotAppClient",
-        "apiPrefix": "/app/v3/api/iot"
+        "apiPrefix": "/app/v3/api"
       }
     }
   ]

@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Core",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-core",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-core",
     "domain": "intelligence",
     "capability": "aiot-core",
     "languages": [

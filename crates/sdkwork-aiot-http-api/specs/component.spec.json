@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Http Api",
     "version": "0.1.0",
     "type": "web-backend-service",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-http-api",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-http-api",
     "domain": "intelligence",
     "capability": "aiot-http-api",
     "languages": [

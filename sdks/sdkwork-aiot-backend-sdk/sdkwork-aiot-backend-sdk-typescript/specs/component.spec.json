@@ -6,7 +6,7 @@
     "displayName": "Aiot Backend Sdk",
     "version": "0.1.0",
     "type": "node-package",
-    "root": "skdwork-aiot/sdks/sdkwork-aiot-backend-sdk/sdkwork-aiot-backend-sdk-typescript",
+    "root": "sdkwork-aiot/sdks/sdkwork-aiot-backend-sdk/sdkwork-aiot-backend-sdk-typescript",
     "domain": "intelligence",
     "capability": "aiot-backend-sdk",
     "languages": [

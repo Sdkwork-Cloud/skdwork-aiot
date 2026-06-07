@@ -1,4 +1,4 @@
-# skdwork-aiot-server
+# sdkwork-aiot-server
 
 ## Xiaozhi Gateway Simulator
 

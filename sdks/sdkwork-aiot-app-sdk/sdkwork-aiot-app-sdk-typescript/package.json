@@ -3,12 +3,36 @@
   "version": "0.1.0",
   "description": "SDKWork AIoT app API generated SDK boundary.",
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "private": false,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "generated/server-openapi/dist",
+    "generated/server-openapi/src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./generated": {
+      "types": "./generated/server-openapi/src/index.ts",
+      "import": "./generated/server-openapi/src/index.ts",
+      "default": "./generated/server-openapi/src/index.ts"
+    }
+  },
   "sideEffects": false,
+  "dependencies": {
+    "@sdkwork/sdk-common": "^1.0.2"
+  },
   "scripts": {
     "generate": "sdkwork-sdk-generate --manifest ../openapi/sdkwork-aiot-app-sdk.sdkgen.json",
     "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
   }
 }

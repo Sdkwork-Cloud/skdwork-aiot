@@ -1,0 +1,1 @@
+{"version":3,"file":"aiot-twin-response.d.ts","sourceRoot":"","sources":["../../src/types/aiot-twin-response.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,SAAS,EAAE,MAAM,cAAc,CAAC;AAE9C,MAAM,WAAW,gBAAgB;IAC/B,IAAI,EAAE,MAAM,CAAC;IACb,GAAG,CAAC,EAAE,MAAM,CAAC;IACb,IAAI,EAAE,SAAS,CAAC;CACjB"}

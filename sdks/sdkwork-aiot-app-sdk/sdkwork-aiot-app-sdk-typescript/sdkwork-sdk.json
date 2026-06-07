@@ -4,8 +4,8 @@
   "generated": true,
   "source": "../openapi/sdkwork-aiot-app-sdk.openapi.json",
   "standardProfile": "sdkwork-v3",
-  "apiPrefix": "/app/v3/api/iot",
+  "apiPrefix": "/app/v3/api",
   "primaryClient": "SdkworkAiotAppClient",
   "resourceStyle": true,
-  "authHeaders": ["Authorization", "Access-Token"]
+  "authHeaders": ["AuthToken", "AccessToken"]
 }

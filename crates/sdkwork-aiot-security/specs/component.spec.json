@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Security",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-security",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-security",
     "domain": "intelligence",
     "capability": "aiot-security",
     "languages": [

@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Adapter Xiaozhi",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-adapter-xiaozhi",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-adapter-xiaozhi",
     "domain": "intelligence",
     "capability": "aiot-adapter-xiaozhi",
     "languages": [

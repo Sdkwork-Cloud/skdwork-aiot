@@ -2,7 +2,7 @@
 
 This directory is the local SDKWork component contract for `sdkwork-aiot-app-api`.
 
-- Component root: `skdwork-aiot/services/sdkwork-aiot-app-api`
+- Component root: `sdkwork-aiot/services/sdkwork-aiot-app-api`
 - Canonical standards: `../../../sdkwork-specs/README.md`
 - Machine-readable contract: `specs/component.spec.json`
 

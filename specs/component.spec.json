@@ -6,7 +6,7 @@
     "displayName": "SDKWork AIoT Server",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot-server",
+    "root": "sdkwork-aiot-server",
     "domain": "device",
     "capability": "aiot-runtime",
     "languages": [

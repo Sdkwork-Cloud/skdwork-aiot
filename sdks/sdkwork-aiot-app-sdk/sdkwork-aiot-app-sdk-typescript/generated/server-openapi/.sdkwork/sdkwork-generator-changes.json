@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "generator": "@sdkwork/sdk-generator",
+  "sdk": {
+    "name": "sdkwork-aiot-app-sdk",
+    "version": "0.1.0",
+    "language": "typescript",
+    "sdkType": "app",
+    "packageName": "@sdkwork/aiot-app-sdk"
+  },
+  "changeFingerprint": "3c626550978c972b707801b0d9ec8161e81d86b33dcd005d80795e4258546c56",
+  "changes": {
+    "createdGeneratedFiles": [],
+    "updatedGeneratedFiles": [],
+    "unchangedGeneratedFiles": [
+      "bin/publish-core.mjs",
+      "bin/publish.ps1",
+      "bin/publish.sh",
+      "bin/sdk-gen.bat",
+      "bin/sdk-gen.sh",
+      "CHANGELOG.md",
+      "LICENSE",
+      "package.json",
+      "README.md",
+      "sdkwork-sdk.json",
+      "src/api/base.ts",
+      "src/api/index.ts",
+      "src/api/iot.ts",
+      "src/api/paths.ts",
+      "src/auth/index.ts",
+      "src/http/client.ts",
+      "src/http/index.ts",
+      "src/index.ts",
+      "src/sdk.ts",
+      "src/types/aiot-command-create-request.ts",
+      "src/types/aiot-command-response.ts",
+      "src/types/aiot-command-result.ts",
+      "src/types/aiot-command.ts",
+      "src/types/aiot-device-list-response.ts",
+      "src/types/aiot-device-response.ts",
+      "src/types/aiot-device.ts",
+      "src/types/aiot-event-list-response.ts",
+      "src/types/aiot-event.ts",
+      "src/types/aiot-twin-response.ts",
+      "src/types/common.ts",
+      "src/types/index.ts",
+      "src/types/json-value.ts",
+      "src/types/media-access.ts",
+      "src/types/media-ai-provenance.ts",
+      "src/types/media-checksum.ts",
+      "src/types/media-kind.ts",
+      "src/types/media-resource.ts",
+      "src/types/media-source.ts",
+      "src/types/problem-details.ts",
+      "tsconfig.json"
+    ],
+    "deletedGeneratedFiles": [],
+    "scaffoldedFiles": [],
+    "preservedScaffoldFiles": [
+      "custom/build-runtime.mjs",
+      "custom/README.md"
+    ],
+    "backedUpFiles": []
+  },
+  "impact": {
+    "schemaVersion": 1,
+    "areas": [],
+    "details": [],
+    "requiresVerification": false,
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped."
+  },
+  "verificationPlan": {
+    "shouldRun": false,
+    "runPhase": "skip",
+    "summary": "No generated, scaffold, or backup changes detected. Verification can be skipped.",
+    "steps": []
+  },
+  "executionDecision": {
+    "schemaVersion": 1,
+    "riskLevel": "low",
+    "nextAction": "skip",
+    "requiresManualReview": false,
+    "applyRequiresExpectedFingerprint": false,
+    "summary": "No actionable changes were detected. No apply or verification step is required.",
+    "reasons": [
+      "no-actionable-changes"
+    ]
+  },
+  "preservedLegacyFiles": false
+}

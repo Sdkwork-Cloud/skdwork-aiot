@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Protocol",
     "version": "0.1.0",
     "type": "rust-crate",
-    "root": "skdwork-aiot/crates/sdkwork-aiot-protocol",
+    "root": "sdkwork-aiot/crates/sdkwork-aiot-protocol",
     "domain": "intelligence",
     "capability": "aiot-protocol",
     "languages": [

@@ -6,7 +6,7 @@
     "displayName": "Sdkwork Aiot Gateway",
     "version": "0.1.0",
     "type": "web-backend-service",
-    "root": "skdwork-aiot/services/sdkwork-aiot-gateway",
+    "root": "sdkwork-aiot/services/sdkwork-aiot-gateway",
     "domain": "intelligence",
     "capability": "aiot-gateway",
     "languages": [
